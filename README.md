@@ -8,7 +8,7 @@ A single-file, browser-based tool to **compare two revisions of a PDF** and **ma
 
 ### Compare modes
 - **Overlay** — blend Old/New revisions with an opacity slider.
-- **Pixel Diff** — colored difference map (red = removed, green = added, grey = unchanged) with an adjustable threshold.
+- **Pixel Diff** — colored difference map (red = removed, green = added, grey = unchanged) with an adjustable threshold, computed in a background **Web Worker** so the UI stays responsive on large PDFs.
 - **Swipe** — drag a divider to reveal Old vs New side by side.
 
 ### Markup tools
@@ -16,8 +16,12 @@ A single-file, browser-based tool to **compare two revisions of a PDF** and **ma
 - Annotations: text, callout, stamps (APPROVED / REJECTED / …) and custom stamps, photo attachments.
 - **Measurement**: length and area tools with a configurable scale (px / mm / m / ft / in).
 - Layers (Architect / Contractor / Engineer / Coordination Review), color and line-width control.
-- Markup list panel, undo, clear, select & delete.
-- Works with mouse **and touch** (tablets / phones).
+- Markup list panel, undo, clear, select & delete (with a visible selection frame on every markup type).
+- Works with mouse **and touch** (tablets / phones); polyline / polygon / area have **Finish** & **Cancel** buttons so they can be completed without a double-click.
+
+### Save & restore
+- Markups are **auto-saved** to the browser (localStorage), keyed by the loaded file name(s), and restored automatically the next time you open the same files.
+- **Save / Load** buttons export and import a portable `.mkup.json` file to move markups between machines.
 
 ### Export
 - **Export Page / Export All** to a marked-up PDF.
