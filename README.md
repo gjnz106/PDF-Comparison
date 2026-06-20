@@ -45,3 +45,16 @@ All PDF processing happens **entirely in your browser**. No file is ever uploade
 ## License
 
 © Dang Quoc Truong (DQT). All rights reserved.
+
+---
+
+## Also in this repo: `ifc-viewer.html`
+
+`ifc-viewer.html` is a separate, self-contained prototype — **IFC Delta 3D**, a BIM
+model-comparison UI built to the *Neutral + Charcoal v4* design system
+(`design_handoff`). It implements the three-pane shell (header, versions sidebar,
+3D viewport, properties panel), Field/Compare/Clash modes, the colorize legend,
+opacity slider, search/issues/tree tabs, the SG (Safeguarding) validator dock, and
+toast/popover/accordion interactions. Static UI prototype with sample data — open
+the file directly in a browser. Requires internet for the Google Fonts
+(Hanken Grotesk + JetBrains Mono).
