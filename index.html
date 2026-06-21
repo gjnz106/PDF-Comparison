@@ -548,6 +548,24 @@ async function batchCompare(){
   doc.save('Batch_Compare_'+new Date().toISOString().slice(0,10)+'.pdf');
   ss('rdy','Batch exported '+total+' pages');
 }
+</script><script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
+
+  // Your web app's Firebase configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyCrqJiIxlahcHZuwa7xS7KMX8Z5c6Ky3Oo",
+    authDomain: "ifc-delta.firebaseapp.com",
+    projectId: "ifc-delta",
+    storageBucket: "ifc-delta.firebasestorage.app",
+    messagingSenderId: "200458024135",
+    appId: "1:200458024135:web:6ae658ad56dba156463ae2"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
 </script>
 </body>
 </html>
