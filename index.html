@@ -65,8 +65,11 @@ body{font-family:var(--ui);background:var(--bg);color:var(--body);display:flex;f
 .mksel{font-size:11.04px;padding:4px 7px;background:var(--surface);border:1px solid var(--border);color:var(--ink);border-radius:8px;font-family:inherit;cursor:pointer}
 .mksel:focus{outline:none;border-color:var(--ink)}
 /* Legend */
-.leg{display:none;align-items:center;gap:14px;padding:5px 16px 6px;flex-shrink:0}.leg.v{display:flex}
-.li{display:flex;align-items:center;gap:6px;font-size:11.04px;font-weight:500;color:var(--muted)}.ld{width:10px;height:10px;border-radius:3px}
+.leg{display:none;align-items:center;justify-content:center;gap:14px;padding:5px 16px 6px;flex-shrink:0}.leg.v{display:flex}
+.li{display:flex;align-items:center;gap:6px;font-size:16.56px;font-weight:500;color:var(--muted)}
+.ld{width:15px;height:15px;border-radius:4px;border:1px solid var(--border);cursor:pointer;padding:0}
+.ld::-webkit-color-swatch-wrapper{padding:0}.ld::-webkit-color-swatch{border:none;border-radius:3px}
+.ld::-moz-color-swatch{border:none;border-radius:3px}
 /* Main */
 .va{flex:1;overflow:auto;position:relative;background:radial-gradient(120% 90% at 50% 35%,#F5F3F0 0%,#EAE7E3 70%,#E2DED9 100%);margin:0 8px 8px;border-radius:var(--r);border:1px solid var(--line)}
 .va canvas{display:block}
@@ -202,9 +205,9 @@ body{font-family:var(--ui);background:var(--bg);color:var(--body);display:flex;f
   <span style="margin-left:auto;font-size:11.52px;color:var(--t2)" id="mkCt">0</span>
 </div>
 <div class="leg" id="leg">
-  <div class="li"><div class="ld" style="background:var(--red)"></div>Removed</div>
-  <div class="li"><div class="ld" style="background:var(--green)"></div>Added</div>
-  <div class="li"><div class="ld" style="background:#B0ABA6"></div>Unchanged</div>
+  <div class="li"><input type="color" class="ld" id="dcR" value="#D05050" title="Click to change 'Removed' color" oninput="setDiffColor('r',this.value)">Removed</div>
+  <div class="li"><input type="color" class="ld" id="dcA" value="#72C5A4" title="Click to change 'Added' color" oninput="setDiffColor('a',this.value)">Added</div>
+  <div class="li"><input type="color" class="ld" id="dcU" value="#C8C8C8" title="Click to change 'Unchanged' color" oninput="setDiffColor('u',this.value)">Unchanged</div>
 </div>
 <div class="mid">
   <div class="va" id="va"></div>
@@ -281,7 +284,11 @@ function dr(ro,ps){if(swipeCleanup)swipeCleanup();var a=document.getElementById(
 function addMC(a){var c=document.createElement('canvas');c.className='mko';c.width=aC.width;c.height=aC.height;c.style.width=aC.style.width;c.style.height=aC.style.height;c.style.position='absolute';c.style.top=aC.offsetTop+'px';c.style.left=aC.offsetLeft+'px';if(mTool)c.classList.add('dr');a.appendChild(c);mC=c;rdMC();setupMkEv(c);}
 function rpOv(){if(!aC)return;var w=aC.width,h=aC.height,x=aC.getContext('2d');x.clearRect(0,0,w,h);x.fillStyle='#FFF';x.fillRect(0,0,w,h);if(iO){x.globalAlpha=1-op;x.drawImage(iO,0,0);}if(iN){x.globalAlpha=op;x.drawImage(iN,0,0);}x.globalAlpha=1;}
 // ── Pixel-diff engine (shared by display + export; offloaded to a Web Worker) ──
-function diffCore(dO,wO,hO,dN,wN,hN,w,h,th){
+// Diff colors are user-customizable via the color swatches in the legend (defaults match the old hardcoded colors)
+var dfR=[208,80,80],dfA=[114,197,164],dfU=[200,200,200];
+function hex2rgb(h){h=h.replace('#','');return [parseInt(h.substr(0,2),16),parseInt(h.substr(2,2),16),parseInt(h.substr(4,2),16)];}
+function setDiffColor(kind,hex){var rgb=hex2rgb(hex);if(kind==='r')dfR=rgb;else if(kind==='a')dfA=rgb;else dfU=rgb;if(cMode==='diff'&&aC)dr(true);}
+function diffCore(dO,wO,hO,dN,wN,hN,w,h,th,cR,cA,cU){
   var out=new Uint8ClampedArray(w*h*4);
   for(var y=0;y<h;y++)for(var xx=0;xx<w;xx++){
     var i=(y*w+xx)*4,rO=255,gO=255,bO=255,rN=255,gN=255,bN=255;
@@ -289,9 +296,9 @@ function diffCore(dO,wO,hO,dN,wN,hN,w,h,th){
     if(xx<wN&&y<hN){var k=(y*wN+xx)*4;rN=dN[k];gN=dN[k+1];bN=dN[k+2];}
     var dd=Math.abs(rO-rN)+Math.abs(gO-gN)+Math.abs(bO-bN);
     if(dd>th){var lO=.299*rO+.587*gO+.114*bO,lN=.299*rN+.587*gN+.114*bN;
-      if(lO<lN){out[i]=208;out[i+1]=80;out[i+2]=80;out[i+3]=220;}
-      else{out[i]=114;out[i+1]=197;out[i+2]=164;out[i+3]=220;}}
-    else{var g=Math.round(.299*rN+.587*gN+.114*bN),m=Math.round(g*.3+200*.7);out[i]=m;out[i+1]=m;out[i+2]=m;out[i+3]=255;}
+      if(lO<lN){out[i]=cR[0];out[i+1]=cR[1];out[i+2]=cR[2];out[i+3]=220;}
+      else{out[i]=cA[0];out[i+1]=cA[1];out[i+2]=cA[2];out[i+3]=220;}}
+    else{var g=Math.round(.299*rN+.587*gN+.114*bN);out[i]=Math.round(g*.3+cU[0]*.7);out[i+1]=Math.round(g*.3+cU[1]*.7);out[i+2]=Math.round(g*.3+cU[2]*.7);out[i+3]=255;}
   }
   return out;
 }
@@ -299,7 +306,7 @@ var diffJobs={},diffToken=0,_dw=null;
 function diffWorker(){
   if(_dw!==null)return _dw;
   try{
-    var src='var diffCore='+diffCore.toString()+';onmessage=function(e){var d=e.data;var out=diffCore(new Uint8ClampedArray(d.o),d.wO,d.hO,new Uint8ClampedArray(d.n),d.wN,d.hN,d.w,d.h,d.th);postMessage({buf:out.buffer,token:d.token},[out.buffer]);};';
+    var src='var diffCore='+diffCore.toString()+';onmessage=function(e){var d=e.data;var out=diffCore(new Uint8ClampedArray(d.o),d.wO,d.hO,new Uint8ClampedArray(d.n),d.wN,d.hN,d.w,d.h,d.th,d.cR,d.cA,d.cU);postMessage({buf:out.buffer,token:d.token},[out.buffer]);};';
     _dw=new Worker(URL.createObjectURL(new Blob([src],{type:'application/javascript'})));
     _dw.onmessage=function(ev){var t=ev.data.token,job=diffJobs[t];delete diffJobs[t];if(!job)return;if(!job.force&&t!==diffToken)return;job.ctx.putImageData(new ImageData(new Uint8ClampedArray(ev.data.buf),job.w,job.h),0,0);if(job.cb)job.cb();};
   }catch(e){_dw=false;}
@@ -310,8 +317,8 @@ function diffInteractive(ctx,w,h){
   if(!iO||!iN)return;
   var dO=iO.getContext('2d').getImageData(0,0,iO.width,iO.height),dN=iN.getContext('2d').getImageData(0,0,iN.width,iN.height);
   var wk=diffWorker();
-  if(wk){var t=++diffToken;diffJobs[t]={ctx:ctx,w:w,h:h,force:false};wk.postMessage({o:dO.data.buffer,wO:iO.width,hO:iO.height,n:dN.data.buffer,wN:iN.width,hN:iN.height,w:w,h:h,th:th,token:t},[dO.data.buffer,dN.data.buffer]);}
-  else{ctx.putImageData(new ImageData(diffCore(dO.data,iO.width,iO.height,dN.data,iN.width,iN.height,w,h,th),w,h),0,0);}
+  if(wk){var t=++diffToken;diffJobs[t]={ctx:ctx,w:w,h:h,force:false};wk.postMessage({o:dO.data.buffer,wO:iO.width,hO:iO.height,n:dN.data.buffer,wN:iN.width,hN:iN.height,w:w,h:h,th:th,cR:dfR,cA:dfA,cU:dfU,token:t},[dO.data.buffer,dN.data.buffer]);}
+  else{ctx.putImageData(new ImageData(diffCore(dO.data,iO.width,iO.height,dN.data,iN.width,iN.height,w,h,th,dfR,dfA,dfU),w,h),0,0);}
 }
 // Build an off-screen diff canvas (used by exports) — always applies
 function diffToCanvas(cO,cN){return new Promise(function(resolve){
@@ -320,8 +327,8 @@ function diffToCanvas(cO,cN){return new Promise(function(resolve){
   if(!cO||!cN){x.fillStyle='#FFF';x.fillRect(0,0,w,h);if(cO)x.drawImage(cO,0,0);if(cN)x.drawImage(cN,0,0);resolve(of);return;}
   var dO=cO.getContext('2d').getImageData(0,0,cO.width,cO.height),dN=cN.getContext('2d').getImageData(0,0,cN.width,cN.height);
   var wk=diffWorker();
-  if(wk){var t=++diffToken;diffJobs[t]={ctx:x,w:w,h:h,force:true,cb:function(){resolve(of);}};wk.postMessage({o:dO.data.buffer,wO:cO.width,hO:cO.height,n:dN.data.buffer,wN:cN.width,hN:cN.height,w:w,h:h,th:th,token:t},[dO.data.buffer,dN.data.buffer]);}
-  else{x.putImageData(new ImageData(diffCore(dO.data,cO.width,cO.height,dN.data,cN.width,cN.height,w,h,th),w,h),0,0);resolve(of);}
+  if(wk){var t=++diffToken;diffJobs[t]={ctx:x,w:w,h:h,force:true,cb:function(){resolve(of);}};wk.postMessage({o:dO.data.buffer,wO:cO.width,hO:cO.height,n:dN.data.buffer,wN:cN.width,hN:cN.height,w:w,h:h,th:th,cR:dfR,cA:dfA,cU:dfU,token:t},[dO.data.buffer,dN.data.buffer]);}
+  else{x.putImageData(new ImageData(diffCore(dO.data,cO.width,cO.height,dN.data,cN.width,cN.height,w,h,th,dfR,dfA,dfU),w,h),0,0);resolve(of);}
 });}
 function rpDf(){if(!aC||!iO||!iN)return;diffInteractive(aC.getContext('2d'),aC.width,aC.height);}
 function drOv(a){var sz=cDS(),sW=Math.max(iO?iO.width:0,iN?iN.width:0),sH=Math.max(iO?iO.height:0,iN?iN.height:0);var c=document.createElement('canvas');c.width=sW;c.height=sH;c.style.width=sz.w+'px';c.style.height=sz.h+'px';var x=c.getContext('2d');x.fillStyle='#FFF';x.fillRect(0,0,sW,sH);if(iO){x.globalAlpha=1-op;x.drawImage(iO,0,0);}if(iN){x.globalAlpha=op;x.drawImage(iN,0,0);}x.globalAlpha=1;a.appendChild(c);aC=c;}
@@ -586,9 +593,9 @@ async function exportPDF(scope){
     // Footer
     var ly=ch-28;doc.setFillColor(44,36,32);doc.rect(0,ly-2,cw,30,'F');doc.setFontSize(9);
     if(appMode==='compare'){
-      doc.setFillColor(208,80,80);doc.rect(16,ly+2,8,8,'F');doc.setTextColor(224,221,216);doc.text('Removed',28,ly+9);
-      doc.setFillColor(114,197,164);doc.rect(100,ly+2,8,8,'F');doc.text('Added',112,ly+9);
-      doc.setFillColor(176,171,166);doc.rect(170,ly+2,8,8,'F');doc.text('Unchanged',182,ly+9);
+      doc.setFillColor(dfR[0],dfR[1],dfR[2]);doc.rect(16,ly+2,8,8,'F');doc.setTextColor(224,221,216);doc.text('Removed',28,ly+9);
+      doc.setFillColor(dfA[0],dfA[1],dfA[2]);doc.rect(100,ly+2,8,8,'F');doc.text('Added',112,ly+9);
+      doc.setFillColor(dfU[0],dfU[1],dfU[2]);doc.rect(170,ly+2,8,8,'F');doc.text('Unchanged',182,ly+9);
       doc.setTextColor(245,160,122);doc.text(mx.length+' markup(s)',270,ly+9);
     }else{
       doc.setTextColor(245,160,122);doc.text(mx.length+' markup(s)',16,ly+9);
@@ -704,9 +711,9 @@ async function batchCompare(){
     doc.text('Old: '+(document.getElementById('nO').textContent||'-')+'  |  New: '+(document.getElementById('nN').textContent||'-'),16,44);
     // Footer
     var ly=ch-28;doc.setFillColor(44,36,32);doc.rect(0,ly-2,cw,30,'F');doc.setFontSize(9);
-    doc.setFillColor(208,80,80);doc.rect(16,ly+2,8,8,'F');doc.setTextColor(224,221,216);doc.text('Removed',28,ly+9);
-    doc.setFillColor(114,197,164);doc.rect(100,ly+2,8,8,'F');doc.text('Added',112,ly+9);
-    doc.setFillColor(176,171,166);doc.rect(170,ly+2,8,8,'F');doc.text('Unchanged',182,ly+9);
+    doc.setFillColor(dfR[0],dfR[1],dfR[2]);doc.rect(16,ly+2,8,8,'F');doc.setTextColor(224,221,216);doc.text('Removed',28,ly+9);
+    doc.setFillColor(dfA[0],dfA[1],dfA[2]);doc.rect(100,ly+2,8,8,'F');doc.text('Added',112,ly+9);
+    doc.setFillColor(dfU[0],dfU[1],dfU[2]);doc.rect(170,ly+2,8,8,'F');doc.text('Unchanged',182,ly+9);
     doc.setTextColor(245,160,122);doc.text(mx.length+' markup(s)',270,ly+9);
     doc.setFontSize(8);doc.text('(c) Dang Quoc Truong (DQT)',cw-240,ly+9);
     doc.setTextColor(139,134,128);doc.text(new Date().toLocaleString(),cw-110,ly+9);
