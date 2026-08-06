@@ -74,6 +74,7 @@ body{font-family:var(--ui);background:var(--bg);color:var(--body);display:flex;f
 .va{flex:1;overflow:auto;position:relative;background:radial-gradient(120% 90% at 50% 35%,#F5F3F0 0%,#EAE7E3 70%,#E2DED9 100%);margin:0 8px 8px;border-radius:var(--r);border:1px solid var(--line)}
 .va canvas{display:block}
 .mko{position:absolute;top:0;left:0;z-index:10;pointer-events:none}.mko.dr{pointer-events:auto;cursor:crosshair}
+.mko.aln{pointer-events:auto;cursor:move}
 /* Swipe */
 .sw{position:relative;display:inline-block}.soc{position:absolute;top:0;left:0;bottom:0;overflow:hidden;pointer-events:none}.soc canvas{display:block}
 .sh{position:absolute;top:0;bottom:0;width:3px;background:var(--accent);cursor:ew-resize;z-index:20}
@@ -164,6 +165,12 @@ body{font-family:var(--ui);background:var(--bg);color:var(--body);display:flex;f
     <label>Old</label><input type="color" class="ld" id="ovColO" value="#E03131" title="Old drawing color" oninput="setOvColor('o',this.value)">
     <label>New</label><input type="color" class="ld" id="ovColN" value="#1C7ED6" title="New drawing color" oninput="setOvColor('n',this.value)">
   </div>
+  <div class="sp" id="alnSp"></div>
+  <div class="sg" id="alnG">
+    <button class="b bs" id="alnBtn" onclick="togAlign()" title="Drag the drawing to line up New with Old; arrow keys nudge">&#10021; Align</button>
+    <span class="pi" id="alnInfo">0, 0</span>
+    <button class="b bs" onclick="resetAlign()" title="Clear alignment offset">Reset</button>
+  </div>
   <div class="tr">
     <button class="b bs" onclick="chgPg(-1)">Prev</button><span class="pi" id="pgI">1/1</span><button class="b bs" onclick="chgPg(1)">Next</button>
     <div class="sp"></div>
@@ -233,6 +240,23 @@ var aC=null,mC=null,mTool=null,selIdx=-1,swipeCleanup=null;
 var allMk={},drawing=false,dStart={x:0,y:0},penPts=[],polyPts=[];
 var appMode='compare'; // 'compare' or 'markup'
 var pSingle=null; // single PDF for markup mode
+// ── Manual alignment: nudge the NEW drawing so it lines up with the OLD one ──
+// alnX/alnY are in source-image pixels and apply to every view mode + exports.
+var alnX=0,alnY=0,alignMode=false,_alnCv=null,_alnSrc=null,_alnKey='';
+function shiftCanvas(c){
+  if(!c||(alnX===0&&alnY===0))return c;
+  var o=document.createElement('canvas');o.width=c.width;o.height=c.height;
+  var x=o.getContext('2d');x.fillStyle='#FFF';x.fillRect(0,0,o.width,o.height);x.drawImage(c,alnX,alnY);
+  return o;
+}
+// The aligned NEW page, cached so dragging doesn't rebuild it for every mousemove
+function iNa(){
+  if(!iN||(alnX===0&&alnY===0))return iN;
+  var key=alnX+','+alnY;
+  if(_alnCv&&_alnSrc===iN&&_alnKey===key)return _alnCv;
+  _alnCv=shiftCanvas(iN);_alnSrc=iN;_alnKey=key;
+  return _alnCv;
+}
 
 function pgMk(){if(!allMk[cPg])allMk[cPg]=[];return allMk[cPg];}
 // Upload
@@ -253,6 +277,8 @@ async function ldSinglePDF(f){
   // Hide compare-specific controls
   document.getElementById('opG').style.display='none';document.getElementById('thG').style.display='none';
   document.querySelector('.mg').style.display='none'; // hide mode group
+  alignMode=false;alnX=0;alnY=0;document.getElementById('alnBtn').classList.remove('bp');
+  document.getElementById('alnG').style.display='none';document.getElementById('alnSp').style.display='none'; // single PDF: nothing to align against
   updPI();ss('rdy','Markup mode - '+f.name);
 }
 async function rCurPgSingle(){
@@ -286,8 +312,8 @@ async function rCurPg(){var o=cPg<=pO.numPages?await rPg(pO,cPg,RS):null;var n=c
 function cDS(){var a=document.getElementById('va');var aW=a.clientWidth,aH=a.clientHeight;var sW=Math.max(iO?iO.width:0,iN?iN.width:0),sH=Math.max(iO?iO.height:0,iN?iN.height:0);if(!sW||!sH)return{w:aW,h:aH,s:1};var bW=sW/RS,bH=sH/RS;if(zM==='fit'){var s=Math.min(aW/bW,aH/bH);return{w:Math.round(bW*s),h:Math.round(bH*s),s:s};}if(zM==='width'){var s2=aW/bW;return{w:Math.round(bW*s2),h:Math.round(bH*s2),s:s2};}return{w:Math.round(bW*zM),h:Math.round(bH*zM),s:zM};}
 
 function dr(ro,ps){if(swipeCleanup)swipeCleanup();var a=document.getElementById('va');var sL=a.scrollLeft,sT=a.scrollTop;if(ro&&aC){if(cMode==='overlay'){rpOv();rdMC();return;}if(cMode==='diff'){rpDf();rdMC();return;}if(cMode==='colorov'){rpCO();rdMC();return;}}a.innerHTML='';aC=null;mC=null;document.getElementById('leg').classList.remove('v');if(cMode==='overlay')drOv(a);else if(cMode==='diff')drDf(a);else if(cMode==='colorov')drCO(a);else if(cMode==='swipe')drSw(a);if(aC)addMC(a);if(ps||ro)requestAnimationFrame(function(){a.scrollLeft=sL;a.scrollTop=sT;});updML();}
-function addMC(a){var c=document.createElement('canvas');c.className='mko';c.width=aC.width;c.height=aC.height;c.style.width=aC.style.width;c.style.height=aC.style.height;c.style.position='absolute';c.style.top=aC.offsetTop+'px';c.style.left=aC.offsetLeft+'px';if(mTool)c.classList.add('dr');a.appendChild(c);mC=c;rdMC();setupMkEv(c);}
-function rpOv(){if(!aC)return;var w=aC.width,h=aC.height,x=aC.getContext('2d');x.clearRect(0,0,w,h);x.fillStyle='#FFF';x.fillRect(0,0,w,h);if(iO){x.globalAlpha=1-op;x.drawImage(iO,0,0);}if(iN){x.globalAlpha=op;x.drawImage(iN,0,0);}x.globalAlpha=1;}
+function addMC(a){var c=document.createElement('canvas');c.className='mko';c.width=aC.width;c.height=aC.height;c.style.width=aC.style.width;c.style.height=aC.style.height;c.style.position='absolute';c.style.top=aC.offsetTop+'px';c.style.left=aC.offsetLeft+'px';if(mTool)c.classList.add('dr');if(alignMode)c.classList.add('aln');a.appendChild(c);mC=c;rdMC();setupMkEv(c);}
+function rpOv(){if(!aC)return;var w=aC.width,h=aC.height,x=aC.getContext('2d'),nn=iNa();x.clearRect(0,0,w,h);x.fillStyle='#FFF';x.fillRect(0,0,w,h);if(iO){x.globalAlpha=1-op;x.drawImage(iO,0,0);}if(nn){x.globalAlpha=op;x.drawImage(nn,0,0);}x.globalAlpha=1;}
 // ── Pixel-diff engine (shared by display + export; offloaded to a Web Worker) ──
 // Diff colors are user-customizable via the color swatches in the legend (defaults match the old hardcoded colors)
 var dfR=[208,80,80],dfA=[114,197,164],dfU=[200,200,200];
@@ -338,18 +364,20 @@ function diffWorker(){
 // Paint the current iO/iN diff into a live canvas context (latest-wins for the slider)
 function diffInteractive(ctx,w,h){
   if(!iO||!iN)return;
-  var dO=iO.getContext('2d').getImageData(0,0,iO.width,iO.height),dN=iN.getContext('2d').getImageData(0,0,iN.width,iN.height);
+  var nn=iNa();
+  var dO=iO.getContext('2d').getImageData(0,0,iO.width,iO.height),dN=nn.getContext('2d').getImageData(0,0,nn.width,nn.height);
   var wk=diffWorker();
-  if(wk){var t=++diffToken;diffJobs[t]={ctx:ctx,w:w,h:h,force:false};wk.postMessage({op:'diff',o:dO.data.buffer,wO:iO.width,hO:iO.height,n:dN.data.buffer,wN:iN.width,hN:iN.height,w:w,h:h,th:th,cR:dfR,cA:dfA,cU:dfU,token:t},[dO.data.buffer,dN.data.buffer]);}
-  else{ctx.putImageData(new ImageData(diffCore(dO.data,iO.width,iO.height,dN.data,iN.width,iN.height,w,h,th,dfR,dfA,dfU),w,h),0,0);}
+  if(wk){var t=++diffToken;diffJobs[t]={ctx:ctx,w:w,h:h,force:false};wk.postMessage({op:'diff',o:dO.data.buffer,wO:iO.width,hO:iO.height,n:dN.data.buffer,wN:nn.width,hN:nn.height,w:w,h:h,th:th,cR:dfR,cA:dfA,cU:dfU,token:t},[dO.data.buffer,dN.data.buffer]);}
+  else{ctx.putImageData(new ImageData(diffCore(dO.data,iO.width,iO.height,dN.data,nn.width,nn.height,w,h,th,dfR,dfA,dfU),w,h),0,0);}
 }
 // Paint the current iO/iN color-overlay into a live canvas context
 function colorOverlayInteractive(ctx,w,h){
   if(!iO||!iN)return;
-  var dO=iO.getContext('2d').getImageData(0,0,iO.width,iO.height),dN=iN.getContext('2d').getImageData(0,0,iN.width,iN.height);
+  var nn=iNa();
+  var dO=iO.getContext('2d').getImageData(0,0,iO.width,iO.height),dN=nn.getContext('2d').getImageData(0,0,nn.width,nn.height);
   var wk=diffWorker();
-  if(wk){var t=++diffToken;diffJobs[t]={ctx:ctx,w:w,h:h,force:false};wk.postMessage({op:'colorov',o:dO.data.buffer,wO:iO.width,hO:iO.height,n:dN.data.buffer,wN:iN.width,hN:iN.height,w:w,h:h,cO:ovO,cN:ovN,token:t},[dO.data.buffer,dN.data.buffer]);}
-  else{ctx.putImageData(new ImageData(colorOverlayCore(dO.data,iO.width,iO.height,dN.data,iN.width,iN.height,w,h,ovO,ovN),w,h),0,0);}
+  if(wk){var t=++diffToken;diffJobs[t]={ctx:ctx,w:w,h:h,force:false};wk.postMessage({op:'colorov',o:dO.data.buffer,wO:iO.width,hO:iO.height,n:dN.data.buffer,wN:nn.width,hN:nn.height,w:w,h:h,cO:ovO,cN:ovN,token:t},[dO.data.buffer,dN.data.buffer]);}
+  else{ctx.putImageData(new ImageData(colorOverlayCore(dO.data,iO.width,iO.height,dN.data,nn.width,nn.height,w,h,ovO,ovN),w,h),0,0);}
 }
 // Build an off-screen diff canvas (used by exports) — always applies
 function diffToCanvas(cO,cN){return new Promise(function(resolve){
@@ -373,10 +401,10 @@ function colorOverlayToCanvas(cO,cN){return new Promise(function(resolve){
 });}
 function rpDf(){if(!aC||!iO||!iN)return;diffInteractive(aC.getContext('2d'),aC.width,aC.height);}
 function rpCO(){if(!aC||!iO||!iN)return;colorOverlayInteractive(aC.getContext('2d'),aC.width,aC.height);}
-function drOv(a){var sz=cDS(),sW=Math.max(iO?iO.width:0,iN?iN.width:0),sH=Math.max(iO?iO.height:0,iN?iN.height:0);var c=document.createElement('canvas');c.width=sW;c.height=sH;c.style.width=sz.w+'px';c.style.height=sz.h+'px';var x=c.getContext('2d');x.fillStyle='#FFF';x.fillRect(0,0,sW,sH);if(iO){x.globalAlpha=1-op;x.drawImage(iO,0,0);}if(iN){x.globalAlpha=op;x.drawImage(iN,0,0);}x.globalAlpha=1;a.appendChild(c);aC=c;}
+function drOv(a){var sz=cDS(),sW=Math.max(iO?iO.width:0,iN?iN.width:0),sH=Math.max(iO?iO.height:0,iN?iN.height:0),nn=iNa();var c=document.createElement('canvas');c.width=sW;c.height=sH;c.style.width=sz.w+'px';c.style.height=sz.h+'px';var x=c.getContext('2d');x.fillStyle='#FFF';x.fillRect(0,0,sW,sH);if(iO){x.globalAlpha=1-op;x.drawImage(iO,0,0);}if(nn){x.globalAlpha=op;x.drawImage(nn,0,0);}x.globalAlpha=1;a.appendChild(c);aC=c;}
 function drDf(a){document.getElementById('leg').classList.add('v');if(!iO||!iN)return;var sz=cDS(),w=Math.max(iO.width,iN.width),h=Math.max(iO.height,iN.height);var c=document.createElement('canvas');c.width=w;c.height=h;c.style.width=sz.w+'px';c.style.height=sz.h+'px';var x=c.getContext('2d');x.fillStyle='#FFF';x.fillRect(0,0,w,h);a.appendChild(c);aC=c;diffInteractive(x,w,h);}
 function drCO(a){if(!iO||!iN)return;var sz=cDS(),w=Math.max(iO.width,iN.width),h=Math.max(iO.height,iN.height);var c=document.createElement('canvas');c.width=w;c.height=h;c.style.width=sz.w+'px';c.style.height=sz.h+'px';var x=c.getContext('2d');x.fillStyle='#FFF';x.fillRect(0,0,w,h);a.appendChild(c);aC=c;colorOverlayInteractive(x,w,h);}
-function drSw(a){var sz=cDS(),sW=Math.max(iO?iO.width:0,iN?iN.width:0),sH=Math.max(iO?iO.height:0,iN?iN.height:0),dW=sz.w,dH=sz.h;var w=document.createElement('div');w.className='sw';w.style.width=dW+'px';w.style.height=dH+'px';var cN=document.createElement('canvas');cN.width=sW;cN.height=sH;cN.style.width=dW+'px';cN.style.height=dH+'px';if(iN)cN.getContext('2d').drawImage(iN,0,0);else{var tx=cN.getContext('2d');tx.fillStyle='#FFF';tx.fillRect(0,0,sW,sH);}w.appendChild(cN);aC=cN;var cl=document.createElement('div');cl.className='soc';cl.style.width=(dW/2)+'px';var cO=document.createElement('canvas');cO.width=sW;cO.height=sH;cO.style.width=dW+'px';cO.style.height=dH+'px';if(iO)cO.getContext('2d').drawImage(iO,0,0);else{var tx2=cO.getContext('2d');tx2.fillStyle='#FFF';tx2.fillRect(0,0,sW,sH);}cl.appendChild(cO);w.appendChild(cl);var hd=document.createElement('div');hd.className='sh';hd.style.left=(dW/2)+'px';w.appendChild(hd);var lo=document.createElement('div');lo.className='slb slb-o';lo.textContent='OLD';w.appendChild(lo);var ln=document.createElement('div');ln.className='slb slb-n';ln.textContent='NEW';w.appendChild(ln);a.appendChild(w);var dg=false;function om(e){if(!dg)return;var r=w.getBoundingClientRect(),x=(e.clientX!==undefined?e.clientX:e.touches[0].clientX)-r.left;x=Math.max(0,Math.min(dW,x));cl.style.width=x+'px';hd.style.left=x+'px';}w.onmousedown=function(e){dg=true;om(e);};w.ontouchstart=function(e){dg=true;om(e);};var up=function(){dg=false;};document.addEventListener('mousemove',om);document.addEventListener('touchmove',om,{passive:true});document.addEventListener('mouseup',up);document.addEventListener('touchend',up);swipeCleanup=function(){document.removeEventListener('mousemove',om);document.removeEventListener('touchmove',om);document.removeEventListener('mouseup',up);document.removeEventListener('touchend',up);swipeCleanup=null;};}
+function drSw(a){var sz=cDS(),sW=Math.max(iO?iO.width:0,iN?iN.width:0),sH=Math.max(iO?iO.height:0,iN?iN.height:0),dW=sz.w,dH=sz.h,nn=iNa();var w=document.createElement('div');w.className='sw';w.style.width=dW+'px';w.style.height=dH+'px';var cN=document.createElement('canvas');cN.width=sW;cN.height=sH;cN.style.width=dW+'px';cN.style.height=dH+'px';if(nn)cN.getContext('2d').drawImage(nn,0,0);else{var tx=cN.getContext('2d');tx.fillStyle='#FFF';tx.fillRect(0,0,sW,sH);}w.appendChild(cN);aC=cN;var cl=document.createElement('div');cl.className='soc';cl.style.width=(dW/2)+'px';var cO=document.createElement('canvas');cO.width=sW;cO.height=sH;cO.style.width=dW+'px';cO.style.height=dH+'px';if(iO)cO.getContext('2d').drawImage(iO,0,0);else{var tx2=cO.getContext('2d');tx2.fillStyle='#FFF';tx2.fillRect(0,0,sW,sH);}cl.appendChild(cO);w.appendChild(cl);var hd=document.createElement('div');hd.className='sh';hd.style.left=(dW/2)+'px';w.appendChild(hd);var lo=document.createElement('div');lo.className='slb slb-o';lo.textContent='OLD';w.appendChild(lo);var ln=document.createElement('div');ln.className='slb slb-n';ln.textContent='NEW';w.appendChild(ln);a.appendChild(w);var dg=false;function om(e){if(!dg)return;var r=w.getBoundingClientRect(),x=(e.clientX!==undefined?e.clientX:e.touches[0].clientX)-r.left;x=Math.max(0,Math.min(dW,x));cl.style.width=x+'px';hd.style.left=x+'px';}w.onmousedown=function(e){dg=true;om(e);};w.ontouchstart=function(e){dg=true;om(e);};var up=function(){dg=false;};document.addEventListener('mousemove',om);document.addEventListener('touchmove',om,{passive:true});document.addEventListener('mouseup',up);document.addEventListener('touchend',up);swipeCleanup=function(){document.removeEventListener('mousemove',om);document.removeEventListener('touchmove',om);document.removeEventListener('mouseup',up);document.removeEventListener('touchend',up);swipeCleanup=null;};}
 
 // ── Markup tools ──
 function sTool(t){if(mTool===t)mTool=null;else mTool=t;selIdx=-1;if(drawing){drawing=false;polyPts=[];}document.querySelectorAll('.mk').forEach(function(b){b.classList.toggle('a',b.dataset.tool===mTool);});if(mC){if(mTool)mC.classList.add('dr');else mC.classList.remove('dr');}rdMC();updPolyBtns();}
@@ -387,6 +415,7 @@ function gLyr(){return document.getElementById('mkLyr').value;}
 
 function setupMkEv(c){
   c.addEventListener('mousedown',function(e){
+    if(alignMode){e.preventDefault();startAlignDrag(e,c);return;}
     if(!mTool)return;var p=tCC(e,c);
     if(mTool==='select'){trySelect(p);return;}
     if(mTool==='text'||mTool==='callout'){showTP(e.clientX,e.clientY,p,mTool);return;}
@@ -443,7 +472,7 @@ function setupMkEv(c){
   var tMap={touchstart:'mousedown',touchmove:'mousemove',touchend:'mouseup'};
   ['touchstart','touchmove','touchend'].forEach(function(type){
     c.addEventListener(type,function(e){
-      if(!mTool)return; // let the area scroll/pan when no tool active
+      if(!mTool&&!alignMode)return; // let the area scroll/pan when no tool active
       var t=e.touches[0]||e.changedTouches[0];if(!t)return;
       e.preventDefault();
       c.dispatchEvent(new MouseEvent(tMap[type],{clientX:t.clientX,clientY:t.clientY,bubbles:true}));
@@ -564,6 +593,25 @@ function updML(){
   updMkCt();saveMk();
 }
 
+// ── Manual alignment controls ──
+function updAlnInfo(){var el=document.getElementById('alnInfo');if(el)el.textContent=Math.round(alnX/RS)+', '+Math.round(alnY/RS);}
+function applyAln(){if(iO||iN)dr(true);updAlnInfo();}
+function togAlign(){
+  alignMode=!alignMode;
+  if(alignMode){mTool=null;document.querySelectorAll('.mk').forEach(function(b){b.classList.remove('a');});}
+  document.getElementById('alnBtn').classList.toggle('bp',alignMode);
+  if(mC){mC.classList.toggle('aln',alignMode);if(!alignMode&&!mTool)mC.classList.remove('dr');}
+  rdMC();
+}
+function resetAlign(){alnX=0;alnY=0;applyAln();}
+function nudgeAln(dx,dy){alnX+=dx;alnY+=dy;applyAln();}
+function startAlignDrag(e,c){
+  var p0=tCC(e,c),x0=alnX,y0=alnY;
+  function mv(ev){var t=ev.touches?ev.touches[0]:ev;var p=tCC(t,c);alnX=Math.round(x0+(p.x-p0.x));alnY=Math.round(y0+(p.y-p0.y));applyAln();}
+  function up(){document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);document.removeEventListener('touchmove',mv);document.removeEventListener('touchend',up);}
+  document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);
+  document.addEventListener('touchmove',mv,{passive:false});document.addEventListener('touchend',up);
+}
 // Controls
 function setMode(m){if(appMode==='markup')return;cMode=m;document.querySelectorAll('[data-mode]').forEach(function(b){b.classList.toggle('a',b.dataset.mode===m);});document.getElementById('opG').style.display=m==='overlay'?'':'none';document.getElementById('thG').style.display=m==='diff'?'':'none';document.getElementById('ovG').style.display=m==='colorov'?'':'none';if(iO||iN)dr();}
 function updOp(v){op=v/100;if(cMode==='overlay')dr(true);}
@@ -599,10 +647,18 @@ function resetAll(){if(swipeCleanup)swipeCleanup();pO=pN=iO=iN=pSingle=null;cPg=
   document.getElementById('uplSec').classList.remove('collapsed');document.getElementById('va').innerHTML='';
   document.querySelectorAll('.mk').forEach(function(b){b.classList.remove('a');});
   document.querySelector('.mg').style.display=''; // restore mode group
+  alnX=0;alnY=0;alignMode=false;_alnCv=null;_alnSrc=null;
+  document.getElementById('alnBtn').classList.remove('bp');
+  document.getElementById('alnG').style.display='';document.getElementById('alnSp').style.display='';
+  updAlnInfo();
   updMkCt();updML();ss('wt','Waiting for PDF files...');}
 function ss(t,m){document.getElementById('sDot').className='sd '+t;document.getElementById('sTxt').textContent=m;}
 window.addEventListener('resize',function(){if(appMode==='markup'){if(iO)drSingle(false,true);}else{if(iO||iN)dr(false,true);}});
-document.addEventListener('keydown',function(e){var t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'))return;if(e.key==='Delete'&&selIdx>=0){delMk(selIdx);}if(e.ctrlKey&&e.key==='z'){e.preventDefault();undoMk();}});
+document.addEventListener('keydown',function(e){var t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'))return;
+  if(alignMode&&e.key.indexOf('Arrow')===0){e.preventDefault();var st=(e.shiftKey?10:1)*RS;
+    if(e.key==='ArrowLeft')nudgeAln(-st,0);else if(e.key==='ArrowRight')nudgeAln(st,0);
+    else if(e.key==='ArrowUp')nudgeAln(0,-st);else nudgeAln(0,st);return;}
+  if(e.key==='Delete'&&selIdx>=0){delMk(selIdx);}if(e.ctrlKey&&e.key==='z'){e.preventDefault();undoMk();}});
 
 // Export
 async function exportPDF(scope){
@@ -617,6 +673,7 @@ async function exportPDF(scope){
       if(!dc){dc=document.createElement('canvas');dc.width=100;dc.height=100;}
     }else{
       var r=await Promise.all([pn<=pO.numPages?rPg(pO,pn,RS):null,pn<=pN.numPages?rPg(pN,pn,RS):null]);
+      r[1]=shiftCanvas(r[1]); // honor manual alignment
       dc=cMode==='colorov'?await colorOverlayToCanvas(r[0],r[1]):await diffToCanvas(r[0],r[1]);
     }
     // Render markups
@@ -745,6 +802,7 @@ async function batchCompare(){
   for(var pn=1;pn<=total;pn++){
     ss('wt','Batch diff page '+pn+'/'+total+'...');
     var r=await Promise.all([pn<=pO.numPages?rPg(pO,pn,RS):null,pn<=pN.numPages?rPg(pN,pn,RS):null]);
+    r[1]=shiftCanvas(r[1]); // honor manual alignment
     var dc=cMode==='colorov'?await colorOverlayToCanvas(r[0],r[1]):await diffToCanvas(r[0],r[1]);
     var mx=allMk[pn]||[];mx.forEach(function(m){renderOneMk(dc.getContext('2d'),m);});
     var cw=dc.width,ch=dc.height,or=cw>ch?'landscape':'portrait';
