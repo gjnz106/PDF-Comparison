@@ -167,9 +167,13 @@ body{font-family:var(--ui);background:var(--bg);color:var(--body);display:flex;f
   </div>
   <div class="sp" id="alnSp"></div>
   <div class="sg" id="alnG">
-    <button class="b bs" id="alnBtn" onclick="togAlign()" title="Drag the drawing to line up New with Old; arrow keys nudge">&#10021; Align</button>
+    <button class="b bs" id="alnBtn" onclick="togAlign()" title="Drag the drawing to line up New with Old; arrow keys nudge, +/- keys scale">&#10021; Align</button>
     <span class="pi" id="alnInfo">0, 0</span>
-    <button class="b bs" onclick="resetAlign()" title="Clear alignment offset">Reset</button>
+    <label>Scale</label>
+    <button class="b bs" onclick="scaleAln(-.005)" title="Shrink New drawing">&minus;</button>
+    <input class="mksel" id="alnScale" type="number" value="100" step="0.5" style="width:70px" title="New drawing scale (%)" oninput="setAlnScale(this.value)">
+    <button class="b bs" onclick="scaleAln(.005)" title="Enlarge New drawing">+</button>
+    <button class="b bs" onclick="resetAlign()" title="Clear alignment offset and scale">Reset</button>
   </div>
   <div class="tr">
     <button class="b bs" onclick="chgPg(-1)">Prev</button><span class="pi" id="pgI">1/1</span><button class="b bs" onclick="chgPg(1)">Next</button>
@@ -240,21 +244,27 @@ var aC=null,mC=null,mTool=null,selIdx=-1,swipeCleanup=null;
 var allMk={},drawing=false,dStart={x:0,y:0},penPts=[],polyPts=[];
 var appMode='compare'; // 'compare' or 'markup'
 var pSingle=null; // single PDF for markup mode
-// ── Manual alignment: nudge the NEW drawing so it lines up with the OLD one ──
-// alnX/alnY are in source-image pixels and apply to every view mode + exports.
-var alnX=0,alnY=0,alignMode=false,_alnCv=null,_alnSrc=null,_alnKey='';
-function shiftCanvas(c){
-  if(!c||(alnX===0&&alnY===0))return c;
+// ── Manual alignment: nudge/resize the NEW drawing so it lines up with the OLD one ──
+// alnX/alnY are in source-image pixels, alnS is a scale factor about the page centre.
+// All three apply to every view mode + exports.
+var alnX=0,alnY=0,alnS=1,alignMode=false,_alnCv=null,_alnSrc=null,_alnKey='';
+function alnIdentity(){return alnX===0&&alnY===0&&alnS===1;}
+function xformCanvas(c){
+  if(!c||alnIdentity())return c;
   var o=document.createElement('canvas');o.width=c.width;o.height=c.height;
-  var x=o.getContext('2d');x.fillStyle='#FFF';x.fillRect(0,0,o.width,o.height);x.drawImage(c,alnX,alnY);
+  var x=o.getContext('2d');x.fillStyle='#FFF';x.fillRect(0,0,o.width,o.height);
+  x.imageSmoothingEnabled=true;x.imageSmoothingQuality='high';
+  var cx=c.width/2,cy=c.height/2;
+  x.translate(alnX,alnY);x.translate(cx,cy);x.scale(alnS,alnS);x.translate(-cx,-cy);
+  x.drawImage(c,0,0);
   return o;
 }
 // The aligned NEW page, cached so dragging doesn't rebuild it for every mousemove
 function iNa(){
-  if(!iN||(alnX===0&&alnY===0))return iN;
-  var key=alnX+','+alnY;
+  if(!iN||alnIdentity())return iN;
+  var key=alnX+','+alnY+','+alnS;
   if(_alnCv&&_alnSrc===iN&&_alnKey===key)return _alnCv;
-  _alnCv=shiftCanvas(iN);_alnSrc=iN;_alnKey=key;
+  _alnCv=xformCanvas(iN);_alnSrc=iN;_alnKey=key;
   return _alnCv;
 }
 
@@ -277,7 +287,7 @@ async function ldSinglePDF(f){
   // Hide compare-specific controls
   document.getElementById('opG').style.display='none';document.getElementById('thG').style.display='none';
   document.querySelector('.mg').style.display='none'; // hide mode group
-  alignMode=false;alnX=0;alnY=0;document.getElementById('alnBtn').classList.remove('bp');
+  alignMode=false;alnX=0;alnY=0;alnS=1;document.getElementById('alnScale').value='100';document.getElementById('alnBtn').classList.remove('bp');
   document.getElementById('alnG').style.display='none';document.getElementById('alnSp').style.display='none'; // single PDF: nothing to align against
   updPI();ss('rdy','Markup mode - '+f.name);
 }
@@ -603,8 +613,11 @@ function togAlign(){
   if(mC){mC.classList.toggle('aln',alignMode);if(!alignMode&&!mTool)mC.classList.remove('dr');}
   rdMC();
 }
-function resetAlign(){alnX=0;alnY=0;applyAln();}
+function resetAlign(){alnX=0;alnY=0;alnS=1;document.getElementById('alnScale').value='100';applyAln();}
 function nudgeAln(dx,dy){alnX+=dx;alnY+=dy;applyAln();}
+// Scale is clamped so the New page can't be shrunk/blown up past anything useful
+function setAlnScale(pct){var v=parseFloat(pct);if(!isFinite(v))return;alnS=Math.max(.2,Math.min(5,v/100));applyAln();}
+function scaleAln(d){alnS=Math.max(.2,Math.min(5,alnS+d));document.getElementById('alnScale').value=(alnS*100).toFixed(1);applyAln();}
 function startAlignDrag(e,c){
   var p0=tCC(e,c),x0=alnX,y0=alnY;
   function mv(ev){var t=ev.touches?ev.touches[0]:ev;var p=tCC(t,c);alnX=Math.round(x0+(p.x-p0.x));alnY=Math.round(y0+(p.y-p0.y));applyAln();}
@@ -647,7 +660,8 @@ function resetAll(){if(swipeCleanup)swipeCleanup();pO=pN=iO=iN=pSingle=null;cPg=
   document.getElementById('uplSec').classList.remove('collapsed');document.getElementById('va').innerHTML='';
   document.querySelectorAll('.mk').forEach(function(b){b.classList.remove('a');});
   document.querySelector('.mg').style.display=''; // restore mode group
-  alnX=0;alnY=0;alignMode=false;_alnCv=null;_alnSrc=null;
+  alnX=0;alnY=0;alnS=1;alignMode=false;_alnCv=null;_alnSrc=null;
+  document.getElementById('alnScale').value='100';
   document.getElementById('alnBtn').classList.remove('bp');
   document.getElementById('alnG').style.display='';document.getElementById('alnSp').style.display='';
   updAlnInfo();
@@ -658,6 +672,7 @@ document.addEventListener('keydown',function(e){var t=e.target;if(t&&(t.tagName=
   if(alignMode&&e.key.indexOf('Arrow')===0){e.preventDefault();var st=(e.shiftKey?10:1)*RS;
     if(e.key==='ArrowLeft')nudgeAln(-st,0);else if(e.key==='ArrowRight')nudgeAln(st,0);
     else if(e.key==='ArrowUp')nudgeAln(0,-st);else nudgeAln(0,st);return;}
+  if(alignMode&&(e.key==='+'||e.key==='='||e.key==='-'||e.key==='_')){e.preventDefault();var sd=(e.shiftKey?.02:.005);scaleAln((e.key==='-'||e.key==='_')?-sd:sd);return;}
   if(e.key==='Delete'&&selIdx>=0){delMk(selIdx);}if(e.ctrlKey&&e.key==='z'){e.preventDefault();undoMk();}});
 
 // Export
@@ -673,7 +688,7 @@ async function exportPDF(scope){
       if(!dc){dc=document.createElement('canvas');dc.width=100;dc.height=100;}
     }else{
       var r=await Promise.all([pn<=pO.numPages?rPg(pO,pn,RS):null,pn<=pN.numPages?rPg(pN,pn,RS):null]);
-      r[1]=shiftCanvas(r[1]); // honor manual alignment
+      r[1]=xformCanvas(r[1]); // honor manual alignment (offset + scale)
       dc=cMode==='colorov'?await colorOverlayToCanvas(r[0],r[1]):await diffToCanvas(r[0],r[1]);
     }
     // Render markups
@@ -802,7 +817,7 @@ async function batchCompare(){
   for(var pn=1;pn<=total;pn++){
     ss('wt','Batch diff page '+pn+'/'+total+'...');
     var r=await Promise.all([pn<=pO.numPages?rPg(pO,pn,RS):null,pn<=pN.numPages?rPg(pN,pn,RS):null]);
-    r[1]=shiftCanvas(r[1]); // honor manual alignment
+    r[1]=xformCanvas(r[1]); // honor manual alignment (offset + scale)
     var dc=cMode==='colorov'?await colorOverlayToCanvas(r[0],r[1]):await diffToCanvas(r[0],r[1]);
     var mx=allMk[pn]||[];mx.forEach(function(m){renderOneMk(dc.getContext('2d'),m);});
     var cw=dc.width,ch=dc.height,or=cw>ch?'landscape':'portrait';
