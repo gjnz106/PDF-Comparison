@@ -34,9 +34,9 @@ body{font-family:var(--ui);background:var(--bg);color:var(--body);display:flex;f
 .hdr-r .b{font-size:18px}.hdr-r .bs{font-size:16.56px}
 .tb .b{font-size:18px}.tb .bs{font-size:16.56px}
 .tb .mb{font-size:18px}.tb .sg label{font-size:16.56px}.tb .pi{font-size:16.56px}
-/* Markup bar has many controls -- kept compact so it fits on one line */
-.mkb .b{font-size:13px}.mkb .bs{font-size:12px}.mkb .sg label{font-size:12px}
-.mkb .mkl{font-size:10.5px}.mkb .mk{font-size:12px}.mkb .mksel{font-size:12px}
+/* Markup bar: split across two rows (tools / settings) so controls stay legible */
+.mkb .b{font-size:19.5px}.mkb .bs{font-size:18px}.mkb .sg label{font-size:18px}
+.mkb .mkl{font-size:16px}.mkb .mk{font-size:18px}.mkb .mksel{font-size:18px}
 /* Upload */
 .upl{display:flex;gap:10px;padding:14px 16px;flex-shrink:0}.upl.collapsed{display:none}
 .uc{flex:1;background:var(--surface);border:1.5px dashed var(--border);border-radius:16px;padding:22px 12px;text-align:center;cursor:pointer;transition:border-color .15s ease,background .15s ease}
@@ -52,21 +52,22 @@ body{font-family:var(--ui);background:var(--bg);color:var(--body);display:flex;f
 .mb:hover{color:var(--ink)}.mb.a{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(44,36,32,.12)}
 .sp{width:1px;height:24px;background:var(--line);margin:0 3px}
 .sg{display:flex;align-items:center;gap:6px}.sg label{font-size:11.04px;color:var(--t2);font-weight:600}
-.mkb .sg{gap:3px}
+.mkb .sg{gap:5px}
 .sg input[type="range"]{-webkit-appearance:none;width:90px;height:5px;background:var(--line);border-radius:999px;outline:none}
 .sg input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid var(--accent);box-shadow:0 2px 6px rgba(44,36,32,.22);cursor:pointer}
 .tr{display:flex;align-items:center;gap:6px;margin-left:auto}
 .pi{font-family:var(--mono);font-size:11.04px;font-weight:500;color:var(--t2)}
 /* Markup bar */
-.mkb{display:none;align-items:center;gap:1px;padding:5px 6px;flex-shrink:0;flex-wrap:wrap;background:var(--surface);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.mkb{display:none;align-items:center;gap:6px;padding:8px 12px;flex-shrink:0;flex-wrap:wrap;background:var(--surface);border-bottom:1px solid var(--line)}
+#mkBar{border-top:1px solid var(--line)}
 .mkb.v{display:flex}
 .mkl{font-size:9.6px;color:var(--faint);font-weight:700;font-family:var(--mono);letter-spacing:.09em;margin-right:2px}
-.mk{padding:3px 5px;font-family:inherit;font-size:11.04px;font-weight:500;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer;border-radius:8px;transition:background .15s ease,color .15s ease,border-color .15s ease}
+.mk{padding:6px 11px;font-family:inherit;font-size:11.04px;font-weight:500;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer;border-radius:9px;transition:background .15s ease,color .15s ease,border-color .15s ease}
 .mk:hover{color:var(--ink);border-color:var(--border)}.mk.a{background:var(--ink);color:#fff;border-color:var(--ink);font-weight:600}
-.cp{width:22px;height:22px;border:1px solid var(--border);border-radius:7px;cursor:pointer;padding:2px;background:#fff}
+.cp{width:32px;height:32px;border:1px solid var(--border);border-radius:8px;cursor:pointer;padding:2px;background:#fff}
 .cp::-webkit-color-swatch-wrapper{padding:0}.cp::-webkit-color-swatch{border:none;border-radius:5px}
-.mksel{font-size:11.04px;padding:2px 3px;background:var(--surface);border:1px solid var(--border);color:var(--ink);border-radius:7px;font-family:inherit;cursor:pointer}
-.mkb .sp{height:18px;margin:0}
+.mksel{font-size:11.04px;padding:5px 7px;background:var(--surface);border:1px solid var(--border);color:var(--ink);border-radius:8px;font-family:inherit;cursor:pointer}
+.mkb .sp{height:26px;margin:0 2px}
 .mksel:focus{outline:none;border-color:var(--ink)}
 /* Legend */
 .leg{display:none;align-items:center;justify-content:center;gap:14px;padding:5px 16px 6px;flex-shrink:0}.leg.v{display:flex}
@@ -209,7 +210,8 @@ body{font-family:var(--ui);background:var(--bg);color:var(--body);display:flex;f
   <div class="sp"></div>
   <button class="mk" data-tool="measure" onclick="sTool('measure')">&#128207; Measure</button>
   <button class="mk" data-tool="area" onclick="sTool('area')">&#11036; Area</button>
-  <div class="sp"></div>
+</div>
+<div class="mkb" id="mkBar2">
   <select class="mksel" id="mkStamp" title="Stamp type"><option value="APPROVED">APPROVED</option><option value="REJECTED">REJECTED</option><option value="REVISED">REVISED</option><option value="FOR REVIEW">FOR REVIEW</option><option value="NOT FOR CONSTRUCTION">NOT FOR CONSTRUCTION</option><option value="VOID">VOID</option><option value="PRELIMINARY">PRELIMINARY</option><option value="FINAL">FINAL</option></select>
   <div class="sp"></div>
   <input type="color" class="cp" id="mkCol" value="#FF4444" title="Color">
@@ -221,8 +223,8 @@ body{font-family:var(--ui);background:var(--bg);color:var(--body);display:flex;f
   <button class="b bs" id="finishBtn" style="display:none" onclick="finishPoly()">&#10003; Finish</button>
   <button class="b bs" id="cancelBtn" style="display:none" onclick="cancelPoly()">Cancel</button>
   <div class="sp"></div>
-  <div class="sg"><label>Scale</label><input class="mksel" id="mkScale" type="text" value="1" style="width:24px" title="px per unit"><select class="mksel" id="mkUnit"><option value="px">px</option><option value="mm">mm</option><option value="m">m</option><option value="ft">ft</option><option value="in">in</option></select></div>
-  <span style="margin-left:auto;font-size:11.52px;color:var(--t2)" id="mkCt">0</span>
+  <div class="sg"><label>Scale</label><input class="mksel" id="mkScale" type="text" value="1" style="width:32px" title="px per unit"><select class="mksel" id="mkUnit"><option value="px">px</option><option value="mm">mm</option><option value="m">m</option><option value="ft">ft</option><option value="in">in</option></select></div>
+  <span style="margin-left:auto;font-size:17.28px;color:var(--t2)" id="mkCt">0</span>
 </div>
 <div class="leg" id="leg">
   <div class="li"><input type="color" class="ld" id="dcR" value="#D05050" title="Click to change 'Removed' color" oninput="setDiffColor('r',this.value)">Removed</div>
@@ -284,7 +286,7 @@ async function ldSinglePDF(f){
   // Auto-launch markup mode
   appMode='markup';mxPg=pSingle.numPages;cPg=1;loadMk();
   await rCurPgSingle();
-  document.getElementById('tb').classList.add('v');document.getElementById('mkBar').classList.add('v');
+  document.getElementById('tb').classList.add('v');document.getElementById('mkBar').classList.add('v');document.getElementById('mkBar2').classList.add('v');
   ['expP','expA','expCSV','saveJ','loadJ','togUpl','togList'].forEach(function(id){document.getElementById(id).style.display='';});
   document.getElementById('batchBtn').style.display='none';
   document.getElementById('uplSec').classList.add('collapsed');
@@ -321,7 +323,7 @@ function rpSingle(){if(!aC||!iO)return;aC.getContext('2d').drawImage(iO,0,0);}
 function hf(i,w){if(i.files[0])ldPDF(i.files[0],w);}
 async function ldPDF(f,w){var b=await f.arrayBuffer();var p=await pdfjsLib.getDocument({data:b}).promise;if(w==='old'){pO=p;document.getElementById('dO').classList.add('ok');document.getElementById('nO').textContent=f.name;}else{pN=p;document.getElementById('dN').classList.add('ok');document.getElementById('nN').textContent=f.name;}if(pO&&pN){document.getElementById('cmpBtn').disabled=false;ss('rdy','Ready');}else ss('wt',(w==='old'?'Old':'New')+' loaded...');}
 async function rPg(pdf,n,s){var pg=await pdf.getPage(n);var vp=pg.getViewport({scale:s});var c=document.createElement('canvas');c.width=vp.width;c.height=vp.height;var x=c.getContext('2d');x.fillStyle='#FFF';x.fillRect(0,0,c.width,c.height);await pg.render({canvasContext:x,viewport:vp}).promise;return c;}
-async function runCompare(){var btn=document.getElementById('cmpBtn');btn.disabled=true;btn.textContent='...';ss('wt','Rendering...');mxPg=Math.max(pO.numPages,pN.numPages);cPg=1;loadMk();await rCurPg();btn.disabled=false;btn.textContent='Compare';document.getElementById('tb').classList.add('v');document.getElementById('mkBar').classList.add('v');['expP','expA','expCSV','saveJ','loadJ','batchBtn','togUpl','togList'].forEach(function(id){document.getElementById(id).style.display='';});document.getElementById('uplSec').classList.add('collapsed');updPI();ss('rdy','Done');}
+async function runCompare(){var btn=document.getElementById('cmpBtn');btn.disabled=true;btn.textContent='...';ss('wt','Rendering...');mxPg=Math.max(pO.numPages,pN.numPages);cPg=1;loadMk();await rCurPg();btn.disabled=false;btn.textContent='Compare';document.getElementById('tb').classList.add('v');document.getElementById('mkBar').classList.add('v');document.getElementById('mkBar2').classList.add('v');['expP','expA','expCSV','saveJ','loadJ','batchBtn','togUpl','togList'].forEach(function(id){document.getElementById(id).style.display='';});document.getElementById('uplSec').classList.add('collapsed');updPI();ss('rdy','Done');}
 async function rCurPg(){var o=cPg<=pO.numPages?await rPg(pO,cPg,RS):null;var n=cPg<=pN.numPages?await rPg(pN,cPg,RS):null;iO=o;iN=n;dr();}
 function cDS(){var a=document.getElementById('va');var aW=a.clientWidth,aH=a.clientHeight;var sW=Math.max(iO?iO.width:0,iN?iN.width:0),sH=Math.max(iO?iO.height:0,iN?iN.height:0);if(!sW||!sH)return{w:aW,h:aH,s:1};var bW=sW/RS,bH=sH/RS;if(zM==='fit'){var s=Math.min(aW/bW,aH/bH);return{w:Math.round(bW*s),h:Math.round(bH*s),s:s};}if(zM==='width'){var s2=aW/bW;return{w:Math.round(bW*s2),h:Math.round(bH*s2),s:s2};}return{w:Math.round(bW*zM),h:Math.round(bH*zM),s:zM};}
 
@@ -657,7 +659,7 @@ function resetAll(){if(swipeCleanup)swipeCleanup();pO=pN=iO=iN=pSingle=null;cPg=
   document.getElementById('dO').classList.remove('ok');document.getElementById('dN').classList.remove('ok');document.getElementById('dS').classList.remove('ok');
   document.getElementById('nO').textContent='';document.getElementById('nN').textContent='';document.getElementById('nS').textContent='';
   document.getElementById('cmpBtn').disabled=true;
-  document.getElementById('tb').classList.remove('v');document.getElementById('mkBar').classList.remove('v');
+  document.getElementById('tb').classList.remove('v');document.getElementById('mkBar').classList.remove('v');document.getElementById('mkBar2').classList.remove('v');
   document.getElementById('leg').classList.remove('v');document.getElementById('mlPanel').classList.remove('v');
   ['expP','expA','expCSV','saveJ','loadJ','batchBtn','togUpl','togList','finishBtn','cancelBtn'].forEach(function(id){document.getElementById(id).style.display='none';});
   drawing=false;polyPts=[];
@@ -854,20 +856,20 @@ async function batchCompare(){
 <style>
 #authGate{position:fixed;inset:0;z-index:9999;background:radial-gradient(120% 90% at 50% 20%,#F5F3F0 0%,#E2DED9 100%);display:flex;align-items:center;justify-content:center;padding:24px;font-family:var(--ui)}
 #authGate.authed{display:none}
-.auth-card{width:340px;max-width:100%;background:#fff;border:1px solid var(--line);border-radius:18px;padding:30px 26px;text-align:center;box-shadow:0 40px 90px -30px rgba(44,36,32,.35)}
-.auth-logo{width:48px;height:48px;margin:0 auto 14px;border-radius:14px;background:var(--ink);display:flex;align-items:center;justify-content:center;font-size:23.04px;font-weight:700;color:#fff}
-.auth-title{font-size:19.2px;font-weight:800;letter-spacing:-.02em;color:var(--ink);margin-bottom:4px}.auth-title span{color:var(--accent)}
-.auth-sub{font-size:12px;color:var(--t2);margin-bottom:18px}
-#authForm{display:flex;flex-direction:column;gap:10px;text-align:left}
-#authForm input{height:42px;padding:0 13px;background:#fff;border:1px solid var(--border);border-radius:10px;color:var(--ink);font-family:inherit;font-size:12.96px;outline:none;transition:border-color .15s}
+.auth-card{width:510px;max-width:100%;background:#fff;border:1px solid var(--line);border-radius:27px;padding:45px 39px;text-align:center;box-shadow:0 40px 90px -30px rgba(44,36,32,.35)}
+.auth-logo{width:72px;height:72px;margin:0 auto 21px;border-radius:21px;background:var(--ink);display:flex;align-items:center;justify-content:center;font-size:34.56px;font-weight:700;color:#fff}
+.auth-title{font-size:28.8px;font-weight:800;letter-spacing:-.02em;color:var(--ink);margin-bottom:6px}.auth-title span{color:var(--accent)}
+.auth-sub{font-size:18px;color:var(--t2);margin-bottom:27px}
+#authForm{display:flex;flex-direction:column;gap:15px;text-align:left}
+#authForm input{height:63px;padding:0 20px;background:#fff;border:1px solid var(--border);border-radius:15px;color:var(--ink);font-family:inherit;font-size:19.44px;outline:none;transition:border-color .15s}
 #authForm input:focus{border-color:var(--ink)}
-.auth-btn{height:42px;margin-top:4px;border:none;border-radius:10px;background:var(--ink);color:#fff;font-family:inherit;font-size:13.44px;font-weight:600;cursor:pointer;box-shadow:var(--sh-btn)}
+.auth-btn{height:63px;margin-top:6px;border:none;border-radius:15px;background:var(--ink);color:#fff;font-family:inherit;font-size:20.16px;font-weight:600;cursor:pointer;box-shadow:var(--sh-btn)}
 .auth-btn:hover{background:#000}
 .auth-btn:disabled{opacity:.6;cursor:not-allowed}
-.auth-err{font-size:11.52px;color:var(--red);min-height:16px}
-.auth-foot{margin-top:16px;font-size:10.56px;color:var(--faint)}.auth-foot b{color:var(--accent);font-weight:600}
-.auth-loading{display:flex;flex-direction:column;align-items:center;gap:14px;padding:16px 0 6px;color:var(--t2);font-size:12px}
-.auth-spin{width:34px;height:34px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--ink);animation:authSpin .8s linear infinite}
+.auth-err{font-size:17.28px;color:var(--red);min-height:24px}
+.auth-foot{margin-top:24px;font-size:15.84px;color:var(--faint)}.auth-foot b{color:var(--accent);font-weight:600}
+.auth-loading{display:flex;flex-direction:column;align-items:center;gap:21px;padding:24px 0 9px;color:var(--t2);font-size:18px}
+.auth-spin{width:51px;height:51px;border-radius:50%;border:5px solid var(--line);border-top-color:var(--ink);animation:authSpin .8s linear infinite}
 @keyframes authSpin{to{transform:rotate(360deg)}}
 </style>
 <script type="module">
