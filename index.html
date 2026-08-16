@@ -343,6 +343,40 @@ async function ldPDF(f,w){var b=await f.arrayBuffer();var p=await pdfjsLib.getDo
 async function rPg(pdf,n,s){var pg=await pdf.getPage(n);var vp=pg.getViewport({scale:s});var c=document.createElement('canvas');c.width=vp.width;c.height=vp.height;var x=c.getContext('2d');x.fillStyle='#FFF';x.fillRect(0,0,c.width,c.height);await pg.render({canvasContext:x,viewport:vp}).promise;return c;}
 async function runCompare(){var btn=document.getElementById('cmpBtn');btn.disabled=true;btn.textContent='...';ss('wt','Rendering...');mxPg=Math.max(pO.numPages,pN.numPages);cPg=1;loadMk();await rCurPg();btn.disabled=false;btn.textContent='Compare';document.getElementById('tb').classList.add('v');document.getElementById('mkBar').classList.add('v');document.getElementById('mkBar2').classList.add('v');['expP','expA','expCSV','saveJ','loadJ','batchBtn','togUpl','togList'].forEach(function(id){document.getElementById(id).style.display='';});document.getElementById('uplSec').classList.add('collapsed');updPI();ss('rdy','Done');}
 async function rCurPg(){var o=cPg<=pO.numPages?await rPg(pO,cPg,RS):null;var n=cPg<=pN.numPages?await rPg(pN,cPg,RS):null;iO=o;iN=n;dr();}
+// ── Sharpen-on-zoom: cDS() always divides by RS to compute display size, so re-rendering the
+// current page at a higher RS changes crispness only, never the on-screen size. We debounce this
+// (only fire once zooming settles) and re-render at a resolution matched to the new zoom level,
+// capped to keep memory/time bounded on large drawings.
+var _sharpToken=0,_sharpTimer=null;
+function scheduleSharpen(){if(_sharpTimer)clearTimeout(_sharpTimer);_sharpTimer=setTimeout(ensureSharpness,350);}
+async function ensureSharpness(){
+  var s=cDS().s;if(!isFinite(s)||s<=0)return;
+  var dpr=window.devicePixelRatio||1,needed=s*dpr*1.15;
+  // Cap by absolute pixel size, not a flat scale multiplier -- large sheets (A1/A0) need a lower
+  // multiplier to hit the same safe canvas size than small ones, avoiding huge-memory/slow renders
+  // and browser canvas-dimension limits.
+  var MAX_PX=8192,refImg=iO||iN;
+  if(refImg&&RS>0){
+    var page1xW=refImg.width/RS,page1xH=refImg.height/RS;
+    needed=Math.min(needed,MAX_PX/Math.max(1,page1xW),MAX_PX/Math.max(1,page1xH));
+  }
+  if(needed<=RS*1.15)return; // current raster is already sharp enough for this zoom level
+  var newRS=Math.round(needed*10)/10,token=++_sharpToken;
+  try{
+    if(appMode==='markup'){
+      if(!pSingle||cPg>pSingle.numPages)return;
+      var img=await rPg(pSingle,cPg,newRS);
+      if(token!==_sharpToken)return; // superseded by a page change or another zoom in the meantime
+      RS=newRS;iO=img;drSingle(false,true);
+    }else{
+      if(!pO&&!pN)return;
+      var oImg=(pO&&cPg<=pO.numPages)?await rPg(pO,cPg,newRS):null;
+      var nImg=(pN&&cPg<=pN.numPages)?await rPg(pN,cPg,newRS):null;
+      if(token!==_sharpToken)return;
+      RS=newRS;iO=oImg;iN=nImg;dr(false,true);
+    }
+  }catch(e){/* keep current raster on any render error */}
+}
 function cDS(){var a=document.getElementById('va');var aW=a.clientWidth,aH=a.clientHeight;var sW=Math.max(iO?iO.width:0,iN?iN.width:0),sH=Math.max(iO?iO.height:0,iN?iN.height:0);if(!sW||!sH)return{w:aW,h:aH,s:1};var bW=sW/RS,bH=sH/RS;if(zM==='fit'){var s=Math.min(aW/bW,aH/bH);return{w:Math.round(bW*s),h:Math.round(bH*s),s:s};}if(zM==='width'){var s2=aW/bW;return{w:Math.round(bW*s2),h:Math.round(bH*s2),s:s2};}return{w:Math.round(bW*zM),h:Math.round(bH*zM),s:zM};}
 
 function dr(ro,ps){if(swipeCleanup)swipeCleanup();var a=document.getElementById('va');var sL=a.scrollLeft,sT=a.scrollTop;if(ro&&aC){if(cMode==='overlay'){rpOv();rdMC();return;}if(cMode==='diff'){rpDf();rdMC();return;}if(cMode==='colorov'){rpCO();rdMC();return;}}a.innerHTML='';aC=null;mC=null;document.getElementById('leg').classList.remove('v');if(cMode==='overlay')drOv(a);else if(cMode==='diff')drDf(a);else if(cMode==='colorov')drCO(a);else if(cMode==='swipe')drSw(a);if(aC)addMC(a);if(ps||ro)requestAnimationFrame(function(){a.scrollLeft=sL;a.scrollTop=sT;});updML();}
@@ -805,8 +839,8 @@ function startAlignDrag(e,c){
 function setMode(m){if(appMode==='markup')return;cMode=m;document.querySelectorAll('[data-mode]').forEach(function(b){b.classList.toggle('a',b.dataset.mode===m);});document.getElementById('opG').style.display=m==='overlay'?'':'none';document.getElementById('thG').style.display=m==='diff'?'':'none';document.getElementById('ovG').style.display=m==='colorov'?'':'none';if(iO||iN)dr();}
 function updOp(v){op=v/100;if(cMode==='overlay')dr(true);}
 function updTh(v){th=parseInt(v);if(cMode==='diff')dr(true);}
-function sZoom(m){zM=m;if(appMode==='markup'){if(iO)drSingle(false,true);}else{if(iO||iN)dr(false,true);}}
-function zBy(d){if(typeof zM!=='number')zM=cDS().s;zM=Math.max(.3,Math.min(5,zM+d));if(appMode==='markup'){if(iO)drSingle(false,true);}else{if(iO||iN)dr(false,true);}}
+function sZoom(m){zM=m;if(appMode==='markup'){if(iO)drSingle(false,true);}else{if(iO||iN)dr(false,true);}scheduleSharpen();}
+function zBy(d){if(typeof zM!=='number')zM=cDS().s;zM=Math.max(.3,Math.min(5,zM+d));if(appMode==='markup'){if(iO)drSingle(false,true);}else{if(iO||iN)dr(false,true);}scheduleSharpen();}
 // Ctrl+Scroll to zoom, anchored on the cursor position (plain scroll still pans as usual)
 function wheelZoom(e){
   if(!e.ctrlKey)return;
@@ -820,12 +854,13 @@ function wheelZoom(e){
   zM=Math.max(.3,Math.min(5,oldS+step));
   if(appMode==='markup'){if(iO)drSingle(false,false);}else{if(iO||iN)dr(false,false);}
   requestAnimationFrame(function(){a.scrollLeft=ratioX*a.scrollWidth-mx;a.scrollTop=ratioY*a.scrollHeight-my;});
+  scheduleSharpen();
 }
 document.getElementById('va').addEventListener('wheel',wheelZoom,{passive:false});
-function chgPg(d){var n=cPg+d;if(n<1||n>mxPg)return;cPg=n;updPI();selIdx=-1;dragMode=null;dragHandle=null;dragOrig=null;ss('wt','Page '+cPg+'...');if(appMode==='markup')rCurPgSingle().then(function(){ss('rdy','Done');updMkCt();updML();});else rCurPg().then(function(){ss('rdy','Done');updMkCt();updML();});}
+function chgPg(d){var n=cPg+d;if(n<1||n>mxPg)return;_sharpToken++;if(_sharpTimer){clearTimeout(_sharpTimer);_sharpTimer=null;}cPg=n;updPI();selIdx=-1;dragMode=null;dragHandle=null;dragOrig=null;ss('wt','Page '+cPg+'...');if(appMode==='markup')rCurPgSingle().then(function(){ss('rdy','Done');updMkCt();updML();});else rCurPg().then(function(){ss('rdy','Done');updMkCt();updML();});}
 function updPI(){document.getElementById('pgI').textContent=cPg+'/'+mxPg;}
 function togUpload(){var s=document.getElementById('uplSec');s.classList.toggle('collapsed');document.getElementById('togUpl').textContent=s.classList.contains('collapsed')?'Files':'Hide';if(appMode==='markup'){if(iO)setTimeout(function(){drSingle(false,true);},50);}else{if(iO||iN)setTimeout(function(){dr(false,true);},50);}}
-function resetAll(){if(swipeCleanup)swipeCleanup();pO=pN=iO=iN=pSingle=null;cPg=1;mxPg=1;zM='fit';allMk={};redoByPg={};mTool=null;selIdx=-1;dragMode=null;dragHandle=null;dragOrig=null;appMode='compare';
+function resetAll(){if(swipeCleanup)swipeCleanup();_sharpToken++;if(_sharpTimer){clearTimeout(_sharpTimer);_sharpTimer=null;}RS=2;pO=pN=iO=iN=pSingle=null;cPg=1;mxPg=1;zM='fit';allMk={};redoByPg={};mTool=null;selIdx=-1;dragMode=null;dragHandle=null;dragOrig=null;appMode='compare';
   document.getElementById('dO').classList.remove('ok');document.getElementById('dN').classList.remove('ok');document.getElementById('dS').classList.remove('ok');
   document.getElementById('nO').textContent='';document.getElementById('nN').textContent='';document.getElementById('nS').textContent='';
   document.getElementById('cmpBtn').disabled=true;
