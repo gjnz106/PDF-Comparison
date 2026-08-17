@@ -260,6 +260,11 @@ body{font-family:var(--ui);background:var(--bg);color:var(--body);display:flex;f
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 var pO=null,pN=null,iO=null,iN=null,cMode='overlay',cPg=1,mxPg=1,op=.5,th=30,zM='fit',RS=2;
+// Markup coordinates live in their own FIXED coordinate space (page size x MK_RS), independent of
+// RS. RS changes at runtime when zooming re-renders the page at higher resolution; without this
+// separation every stored markup would silently shift/shrink relative to the drawing underneath.
+var MK_RS=2;
+function mkScaleF(){return RS/MK_RS;}
 var aC=null,mC=null,mTool=null,selIdx=-1,swipeCleanup=null;
 var allMk={},drawing=false,dStart={x:0,y:0},penPts=[],polyPts=[];
 var redoByPg={}; // per-page redo stack, paired with the existing "undo = pop last markup" model
@@ -269,8 +274,9 @@ var dragMode=null,dragHandle=null,dragOrig=null,dragStart=null,dragCancelled=fal
 var appMode='compare'; // 'compare' or 'markup'
 var pSingle=null; // single PDF for markup mode
 // ── Manual alignment: nudge/resize the NEW drawing so it lines up with the OLD one ──
-// alnX/alnY are in source-image pixels, alnS is a scale factor about the page centre.
-// All three apply to every view mode + exports.
+// alnX/alnY are stored in MARKUP space (like markup coords, so they survive RS changes);
+// they're scaled to the image's own resolution when applied. alnS is a scale factor about
+// the page centre. All three apply to every view mode + exports.
 var alnX=0,alnY=0,alnS=1,alignMode=false,_alnCv=null,_alnSrc=null,_alnKey='';
 function alnIdentity(){return alnX===0&&alnY===0&&alnS===1;}
 function xformCanvas(c){
@@ -278,15 +284,15 @@ function xformCanvas(c){
   var o=document.createElement('canvas');o.width=c.width;o.height=c.height;
   var x=o.getContext('2d');x.fillStyle='#FFF';x.fillRect(0,0,o.width,o.height);
   x.imageSmoothingEnabled=true;x.imageSmoothingQuality='high';
-  var cx=c.width/2,cy=c.height/2;
-  x.translate(alnX,alnY);x.translate(cx,cy);x.scale(alnS,alnS);x.translate(-cx,-cy);
+  var cx=c.width/2,cy=c.height/2,af=RS/MK_RS;
+  x.translate(alnX*af,alnY*af);x.translate(cx,cy);x.scale(alnS,alnS);x.translate(-cx,-cy);
   x.drawImage(c,0,0);
   return o;
 }
 // The aligned NEW page, cached so dragging doesn't rebuild it for every mousemove
 function iNa(){
   if(!iN||alnIdentity())return iN;
-  var key=alnX+','+alnY+','+alnS;
+  var key=alnX+','+alnY+','+alnS+','+RS; // RS matters: the cached canvas is built at the image's resolution
   if(_alnCv&&_alnSrc===iN&&_alnKey===key)return _alnCv;
   _alnCv=xformCanvas(iN);_alnSrc=iN;_alnKey=key;
   return _alnCv;
@@ -488,7 +494,8 @@ function copySelected(){if(selIdx>=0){var m=pgMk()[selIdx];if(m)mkClipboard=JSON
 // Paste works on whichever page is currently active, so switching pages (Prev/Next) then pasting copies across pages
 function pasteClipboard(){if(!mkClipboard)return;pgMk().push(translateFromOrig(mkClipboard,20,20));finishDraw();syncPropUI();}
 function duplicateSelected(){if(selIdx<0)return;var src=pgMk()[selIdx];if(!src)return;pgMk().push(translateFromOrig(src,20,20));finishDraw();syncPropUI();}
-function tCC(e,c){var r=c.getBoundingClientRect(),sx=c.width/r.width,sy=c.height/r.height;return{x:(e.clientX-r.left)*sx,y:(e.clientY-r.top)*sy};}
+// Pointer position -> markup coordinate space (divided by mkScaleF so it stays RS-independent)
+function tCC(e,c){var r=c.getBoundingClientRect(),f=mkScaleF(),sx=c.width/r.width,sy=c.height/r.height;return{x:(e.clientX-r.left)*sx/f,y:(e.clientY-r.top)*sy/f};}
 function gLw(){return parseInt(document.getElementById('mkLw').value)||3;}
 function gCol(){return document.getElementById('mkCol').value;}
 function gLyr(){return document.getElementById('mkLyr').value;}
@@ -570,7 +577,9 @@ function setupMkEv(c){
     if(!drawing||!mTool)return;var p=tCC(e,c);
     if(mTool==='pen')penPts.push(p);
     if(mTool==='polyline'||mTool==='polygon'||mTool==='area'){rdMC();drawPreviewPoly(c,p);return;}
-    rdMC();var x=c.getContext('2d'),col=gCol(),lw=gLw();x.strokeStyle=col;x.lineWidth=lw;x.setLineDash([5,4]);x.globalAlpha=.7;
+    rdMC();var x=c.getContext('2d'),col=gCol(),lw=gLw(),pf=mkScaleF();
+    x.save();if(pf!==1)x.scale(pf,pf); // preview is drawn in markup space, same as rdMC()
+    x.strokeStyle=col;x.lineWidth=lw;x.setLineDash([5,4]);x.globalAlpha=.7;
     if(mTool==='rect')x.strokeRect(dStart.x,dStart.y,p.x-dStart.x,p.y-dStart.y);
     else if(mTool==='circle'){var rx=Math.abs(p.x-dStart.x)/2,ry=Math.abs(p.y-dStart.y)/2,cx=Math.min(dStart.x,p.x)+rx,cy=Math.min(dStart.y,p.y)+ry;x.beginPath();x.ellipse(cx,cy,rx,ry,0,0,Math.PI*2);x.stroke();}
     else if(mTool==='cloud')drCloud(x,dStart.x,dStart.y,p.x-dStart.x,p.y-dStart.y,col,lw);
@@ -579,7 +588,7 @@ function setupMkEv(c){
     else if(mTool==='arrow')drArrow(x,dStart.x,dStart.y,p.x,p.y,col,lw);
     else if(mTool==='measure'){x.beginPath();x.moveTo(dStart.x,dStart.y);x.lineTo(p.x,p.y);x.stroke();var dist=calcDist(dStart.x,dStart.y,p.x,p.y);x.font='bold 16px Arial';x.fillStyle=col;x.fillText(dist,(dStart.x+p.x)/2+8,(dStart.y+p.y)/2-8);}
     else if(mTool==='pen'&&penPts.length>1){x.beginPath();x.moveTo(penPts[0].x,penPts[0].y);for(var i=1;i<penPts.length;i++)x.lineTo(penPts[i].x,penPts[i].y);x.stroke();}
-    x.setLineDash([]);x.globalAlpha=1;
+    x.setLineDash([]);x.globalAlpha=1;x.restore();
   });
   c.addEventListener('mouseup',function(e){
     if(mTool==='select'){if(dragMode){dragMode=null;dragHandle=null;dragOrig=null;updML();}return;}
@@ -632,11 +641,14 @@ function setupMkEv(c){
   });
 }
 function drawPreviewPoly(c,hover){
-  var x=c.getContext('2d'),col=gCol(),lw=gLw();x.strokeStyle=col;x.lineWidth=lw;x.setLineDash([5,4]);x.globalAlpha=.7;
+  var x=c.getContext('2d'),col=gCol(),lw=gLw(),f=mkScaleF();
+  x.save();if(f!==1)x.scale(f,f); // markup space, same as rdMC()
+  x.strokeStyle=col;x.lineWidth=lw;x.setLineDash([5,4]);x.globalAlpha=.7;
   if(polyPts.length>0){x.beginPath();x.moveTo(polyPts[0].x,polyPts[0].y);for(var i=1;i<polyPts.length;i++)x.lineTo(polyPts[i].x,polyPts[i].y);if(hover)x.lineTo(hover.x,hover.y);if(mTool==='polygon'&&polyPts.length>1)x.closePath();x.stroke();}
   x.setLineDash([]);x.globalAlpha=1;
   // Draw dots
   x.fillStyle=col;polyPts.forEach(function(pt){x.beginPath();x.arc(pt.x,pt.y,4,0,Math.PI*2);x.fill();});
+  x.restore();
   updPolyBtns();
 }
 function hitTestAll(p){var mk=pgMk();for(var i=mk.length-1;i>=0;i--){if(hitTest(mk[i],p))return i;}return -1;}
@@ -756,7 +768,10 @@ function mkBBox(ctx,m){
 function drawSelBox(x,bb,handles){if(!bb)return;x.save();x.setLineDash([6,4]);x.strokeStyle='#8B9CF4';x.lineWidth=2;x.strokeRect(bb.x-5,bb.y-5,bb.w+10,bb.h+10);x.setLineDash([]);x.fillStyle='#fff';x.strokeStyle='#8B9CF4';x.lineWidth=1.5;(handles||[]).forEach(function(p){x.fillRect(p.x-5,p.y-5,10,10);x.strokeRect(p.x-5,p.y-5,10,10);});x.restore();}
 function rdMC(){
   if(!mC)return;var x=mC.getContext('2d');x.clearRect(0,0,mC.width,mC.height);
+  // Draw in markup space; the canvas itself is at RS resolution so markup stays crisp when zoomed
+  var f=mkScaleF();x.save();if(f!==1)x.scale(f,f);
   pgMk().forEach(function(m,i){renderOneMk(x,m);if(i===selIdx)drawSelBox(x,mkBBox(x,m),getHandles(x,m));});
+  x.restore();
 }
 // Text popup
 var tpPos=null,tpType='text',tpEditIdx=-1;
@@ -814,7 +829,7 @@ function updML(){
 }
 
 // ── Manual alignment controls ──
-function updAlnInfo(){var el=document.getElementById('alnInfo');if(el)el.textContent=Math.round(alnX/RS)+', '+Math.round(alnY/RS);}
+function updAlnInfo(){var el=document.getElementById('alnInfo');if(el)el.textContent=Math.round(alnX/MK_RS)+', '+Math.round(alnY/MK_RS);}
 function applyAln(){if(iO||iN)dr(true);updAlnInfo();}
 function togAlign(){
   alignMode=!alignMode;
@@ -880,7 +895,7 @@ function resetAll(){if(swipeCleanup)swipeCleanup();_sharpToken++;if(_sharpTimer)
 function ss(t,m){document.getElementById('sDot').className='sd '+t;document.getElementById('sTxt').textContent=m;}
 window.addEventListener('resize',function(){if(appMode==='markup'){if(iO)drSingle(false,true);}else{if(iO||iN)dr(false,true);}});
 document.addEventListener('keydown',function(e){var t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'))return;
-  if(alignMode&&e.key.indexOf('Arrow')===0){e.preventDefault();var st=(e.shiftKey?10:1)*RS;
+  if(alignMode&&e.key.indexOf('Arrow')===0){e.preventDefault();var st=(e.shiftKey?10:1)*MK_RS;
     if(e.key==='ArrowLeft')nudgeAln(-st,0);else if(e.key==='ArrowRight')nudgeAln(st,0);
     else if(e.key==='ArrowUp')nudgeAln(0,-st);else nudgeAln(0,st);return;}
   if(alignMode&&(e.key==='+'||e.key==='='||e.key==='-'||e.key==='_')){e.preventDefault();var sd=(e.shiftKey?.02:.005);scaleAln((e.key==='-'||e.key==='_')?-sd:sd);return;}
@@ -916,7 +931,7 @@ async function exportPDF(scope){
       dc=cMode==='colorov'?await colorOverlayToCanvas(r[0],r[1]):await diffToCanvas(r[0],r[1]);
     }
     // Render markups
-    var mx=allMk[pn]||[];mx.forEach(function(m){renderOneMk(dc.getContext('2d'),m);});
+    var mx=allMk[pn]||[];var exf=RS/MK_RS,exc=dc.getContext('2d');exc.save();if(exf!==1)exc.scale(exf,exf);mx.forEach(function(m){renderOneMk(exc,m);});exc.restore();
     var cw=dc.width,ch=dc.height,or=cw>ch?'landscape':'portrait';
     if(idx===0)doc=new J({orientation:or,unit:'px',format:[cw,ch],compress:true});else doc.addPage([cw,ch],or);
     doc.addImage(dc.toDataURL('image/jpeg',.92),'JPEG',0,0,cw,ch);
@@ -1052,7 +1067,7 @@ async function batchCompare(){
     var r=await Promise.all([pn<=pO.numPages?rPg(pO,pn,RS):null,pn<=pN.numPages?rPg(pN,pn,RS):null]);
     r[1]=xformCanvas(r[1]); // honor manual alignment (offset + scale)
     var dc=cMode==='colorov'?await colorOverlayToCanvas(r[0],r[1]):await diffToCanvas(r[0],r[1]);
-    var mx=allMk[pn]||[];mx.forEach(function(m){renderOneMk(dc.getContext('2d'),m);});
+    var mx=allMk[pn]||[];var exf=RS/MK_RS,exc=dc.getContext('2d');exc.save();if(exf!==1)exc.scale(exf,exf);mx.forEach(function(m){renderOneMk(exc,m);});exc.restore();
     var cw=dc.width,ch=dc.height,or=cw>ch?'landscape':'portrait';
     if(pn===1)doc=new J({orientation:or,unit:'px',format:[cw,ch],compress:true});else doc.addPage([cw,ch],or);
     doc.addImage(dc.toDataURL('image/jpeg',.92),'JPEG',0,0,cw,ch);
