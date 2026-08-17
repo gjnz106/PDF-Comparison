@@ -272,6 +272,16 @@ var pO=null,pN=null,iO=null,iN=null,cMode='overlay',cPg=1,mxPg=1,op=.5,th=30,zM=
 var MK_RS=2;
 function mkScaleF(){return RS/MK_RS;}
 var aC=null,mC=null,mTool=null,selIdx=-1,swipeCleanup=null;
+// Multi-selection. selIdxs is the source of truth; selIdx mirrors its first entry so the
+// single-selection code paths (resize handles, property sync, inline editors) keep working.
+var selIdxs=[],marquee=null;
+function setSel(a){selIdxs=(a||[]).filter(function(v,i,s){return v>=0&&s.indexOf(v)===i;});selIdx=selIdxs.length?selIdxs[0]:-1;}
+function toggleSel(i){var k=selIdxs.indexOf(i);if(k>=0)selIdxs.splice(k,1);else selIdxs.push(i);selIdx=selIdxs.length?selIdxs[0]:-1;}
+function isSel(i){return selIdxs.indexOf(i)>=0;}
+// Selected markups, primary first, as {i,m} pairs
+function selMks(){var mk=pgMk();return selIdxs.filter(function(i){return i<mk.length;}).map(function(i){return{i:i,m:mk[i]};});}
+// Apply an edit to every selected markup (property toolbar acts on the whole selection)
+function eachSel(fn){selMks().forEach(function(o){fn(o.m,o.i);});}
 var allMk={},drawing=false,dStart={x:0,y:0},penPts=[],polyPts=[];
 var redoByPg={}; // per-page redo stack, paired with the existing "undo = pop last markup" model
 function redoStk(){if(!redoByPg[cPg])redoByPg[cPg]=[];return redoByPg[cPg];}
@@ -489,17 +499,21 @@ function drCO(a){if(!iO||!iN)return;var sz=cDS(),w=Math.max(iO.width,iN.width),h
 function drSw(a){var sz=cDS(),sW=Math.max(iO?iO.width:0,iN?iN.width:0),sH=Math.max(iO?iO.height:0,iN?iN.height:0),dW=sz.w,dH=sz.h,nn=iNa();var w=document.createElement('div');w.className='sw';w.style.width=dW+'px';w.style.height=dH+'px';var cN=document.createElement('canvas');cN.width=sW;cN.height=sH;cN.style.width=dW+'px';cN.style.height=dH+'px';if(nn)cN.getContext('2d').drawImage(nn,0,0);else{var tx=cN.getContext('2d');tx.fillStyle='#FFF';tx.fillRect(0,0,sW,sH);}w.appendChild(cN);aC=cN;var cl=document.createElement('div');cl.className='soc';cl.style.width=(dW/2)+'px';var cO=document.createElement('canvas');cO.width=sW;cO.height=sH;cO.style.width=dW+'px';cO.style.height=dH+'px';if(iO)cO.getContext('2d').drawImage(iO,0,0);else{var tx2=cO.getContext('2d');tx2.fillStyle='#FFF';tx2.fillRect(0,0,sW,sH);}cl.appendChild(cO);w.appendChild(cl);var hd=document.createElement('div');hd.className='sh';hd.style.left=(dW/2)+'px';w.appendChild(hd);var lo=document.createElement('div');lo.className='slb slb-o';lo.textContent='OLD';w.appendChild(lo);var ln=document.createElement('div');ln.className='slb slb-n';ln.textContent='NEW';w.appendChild(ln);a.appendChild(w);var dg=false;function om(e){if(!dg)return;var r=w.getBoundingClientRect(),x=(e.clientX!==undefined?e.clientX:e.touches[0].clientX)-r.left;x=Math.max(0,Math.min(dW,x));cl.style.width=x+'px';hd.style.left=x+'px';}w.onmousedown=function(e){dg=true;om(e);};w.ontouchstart=function(e){dg=true;om(e);};var up=function(){dg=false;};document.addEventListener('mousemove',om);document.addEventListener('touchmove',om,{passive:true});document.addEventListener('mouseup',up);document.addEventListener('touchend',up);swipeCleanup=function(){document.removeEventListener('mousemove',om);document.removeEventListener('touchmove',om);document.removeEventListener('mouseup',up);document.removeEventListener('touchend',up);swipeCleanup=null;};}
 
 // ── Markup tools ──
-function sTool(t,force){if(!force&&mTool===t)mTool=null;else mTool=t;selIdx=-1;dragMode=null;dragHandle=null;dragOrig=null;if(drawing){drawing=false;polyPts=[];}document.querySelectorAll('.mk[data-tool]').forEach(function(b){b.classList.toggle('a',b.dataset.tool===mTool);});applyToolCursorClass();rdMC();updPolyBtns();}
+function sTool(t,force){if(!force&&mTool===t)mTool=null;else mTool=t;setSel([]);dragMode=null;dragHandle=null;dragOrig=null;if(drawing){drawing=false;polyPts=[];}document.querySelectorAll('.mk[data-tool]').forEach(function(b){b.classList.toggle('a',b.dataset.tool===mTool);});applyToolCursorClass();rdMC();updPolyBtns();}
 // Keep the .mko overlay's pointer-events/cursor in sync with the active tool
 function applyToolCursorClass(){if(!mC)return;mC.classList.remove('dr','sel');if(mTool==='select')mC.classList.add('sel');else if(mTool)mC.classList.add('dr');mC.style.cursor='';}
 // After placing/finishing a markup: hand off to Select with the new item selected (Bluebeam-style)
-function finishDraw(){var mk=pgMk();redoStk().length=0;mTool='select';selIdx=mk.length-1;document.querySelectorAll('.mk[data-tool]').forEach(function(b){b.classList.toggle('a',b.dataset.tool==='select');});applyToolCursorClass();rdMC();updMkCt();updML();}
+function finishDraw(){var mk=pgMk();redoStk().length=0;mTool='select';setSel([mk.length-1]);document.querySelectorAll('.mk[data-tool]').forEach(function(b){b.classList.toggle('a',b.dataset.tool==='select');});applyToolCursorClass();rdMC();updMkCt();updML();}
 // ── Copy / Paste / Duplicate ──
 var mkClipboard=null;
-function copySelected(){if(selIdx>=0){var m=pgMk()[selIdx];if(m)mkClipboard=JSON.parse(JSON.stringify(m));}}
+function copySelected(){var s=selMks();if(s.length)mkClipboard=JSON.parse(JSON.stringify(s.map(function(o){return o.m;})));}
 // Paste works on whichever page is currently active, so switching pages (Prev/Next) then pasting copies across pages
-function pasteClipboard(){if(!mkClipboard)return;pgMk().push(translateFromOrig(mkClipboard,20,20));finishDraw();syncPropUI();}
-function duplicateSelected(){if(selIdx<0)return;var src=pgMk()[selIdx];if(!src)return;pgMk().push(translateFromOrig(src,20,20));finishDraw();syncPropUI();}
+function pasteClipboard(){
+  if(!mkClipboard)return;var src=[].concat(mkClipboard),mk=pgMk(),n=[];
+  src.forEach(function(m){mk.push(translateFromOrig(m,20,20));n.push(mk.length-1);});
+  redoStk().length=0;sTool('select',true);setSel(n);rdMC();updMkCt();updML();syncPropUI();
+}
+function duplicateSelected(){var s=selMks();if(!s.length)return;var mk=pgMk(),n=[];s.forEach(function(o){mk.push(translateFromOrig(o.m,20,20));n.push(mk.length-1);});redoStk().length=0;sTool('select',true);setSel(n);rdMC();updMkCt();updML();syncPropUI();}
 // Pointer position -> markup coordinate space (divided by mkScaleF so it stays RS-independent)
 function tCC(e,c){var r=c.getBoundingClientRect(),f=mkScaleF(),sx=c.width/r.width,sy=c.height/r.height;return{x:(e.clientX-r.left)*sx/f,y:(e.clientY-r.top)*sy/f};}
 // Holding Shift constrains the shape being drawn, Bluebeam-style:
@@ -543,23 +557,23 @@ function gOpacity(){return (parseInt(document.getElementById('mkOpacity').value)
 // Shapes that can carry a fill; lines/text/stamps can't
 function fillable(t){return t==='rect'||t==='circle'||t==='cloud'||t==='polygon'||t==='area';}
 // Toolbar property changes apply live to the selected markup (if any); otherwise they just set the defaults for the next new one
-function onMkColChange(v){if(selIdx>=0){var m=pgMk()[selIdx];if(m){m.color=v;rdMC();updML();}}}
-function onMkLwChange(v){if(selIdx>=0){var m=pgMk()[selIdx];if(m){m.lw=parseInt(v)||3;rdMC();}}}
-function onMkLyrChange(v){if(selIdx>=0){var m=pgMk()[selIdx];if(m){m.layer=v;updML();}}}
-function onMkDashChange(v){var d=dashFor(v);if(selIdx>=0){var m=pgMk()[selIdx];if(m){m.dash=d;rdMC();}}}
-function onMkBgColChange(v){if(selIdx>=0){var m=pgMk()[selIdx];if(m&&(m.type==='text'||m.type==='callout')){m.bg=v;rdMC();}}}
-function onMkBgOnChange(v){if(selIdx>=0){var m=pgMk()[selIdx];if(m&&(m.type==='text'||m.type==='callout')){m.bgOn=v;rdMC();}}}
-function onMkFillChange(v){if(selIdx>=0){var m=pgMk()[selIdx];if(m&&fillable(m.type)){m.fill=v;rdMC();}}}
-function onMkFillOnChange(v){if(selIdx>=0){var m=pgMk()[selIdx];if(m&&fillable(m.type)){m.fillOn=v;rdMC();}}}
+function onMkColChange(v){if(selIdx<0)return;eachSel(function(m){m.color=v;});rdMC();updML();}
+function onMkLwChange(v){if(selIdx<0)return;eachSel(function(m){m.lw=parseInt(v)||3;});rdMC();}
+function onMkLyrChange(v){if(selIdx<0)return;eachSel(function(m){m.layer=v;});updML();}
+function onMkDashChange(v){var d=dashFor(v);if(selIdx<0)return;eachSel(function(m){m.dash=d;});rdMC();}
+function onMkBgColChange(v){if(selIdx<0)return;eachSel(function(m){if(m.type==='text'||m.type==='callout')m.bg=v;});rdMC();}
+function onMkBgOnChange(v){if(selIdx<0)return;eachSel(function(m){if(m.type==='text'||m.type==='callout')m.bgOn=v;});rdMC();}
+function onMkFillChange(v){if(selIdx<0)return;eachSel(function(m){if(fillable(m.type))m.fill=v;});rdMC();}
+function onMkFillOnChange(v){if(selIdx<0)return;eachSel(function(m){if(fillable(m.type))m.fillOn=v;});rdMC();}
 function onMkOpacityChange(v){
   document.getElementById('mkOpacityVal').textContent=v+'%';
-  if(selIdx>=0){var m=pgMk()[selIdx];if(m){m.opacity=(parseInt(v)||100)/100;rdMC();}}
+  if(selIdx<0)return;eachSel(function(m){m.opacity=(parseInt(v)||100)/100;});rdMC();
 }
 function toggleTextStyle(style){
   var id=style==='bold'?'mkBoldBtn':style==='italic'?'mkItalicBtn':'mkUnderlineBtn';
   var btn=document.getElementById(id),on=!btn.classList.contains('a');
   btn.classList.toggle('a',on);
-  if(selIdx>=0){var m=pgMk()[selIdx];if(m&&(m.type==='text'||m.type==='callout')){m[style]=on;rdMC();}}
+  if(selIdx<0)return;eachSel(function(m){if(m.type==='text'||m.type==='callout')m[style]=on;});rdMC();
 }
 // Reflect the selected markup's own properties back into the toolbar controls
 function syncPropUI(){
@@ -591,13 +605,23 @@ function setupMkEv(c){
     if(alignMode){e.preventDefault();startAlignDrag(e,c);return;}
     if(!mTool)return;var p=tCC(e,c);
     if(mTool==='select'){
-      var mk=pgMk();
-      if(selIdx>=0&&selIdx<mk.length){
+      var mk=pgMk(),add=e.ctrlKey||e.metaKey||e.shiftKey;
+      // Resize handles only exist while exactly one markup is selected
+      if(selIdxs.length===1&&selIdx<mk.length&&!add){
         var h=handleAt(p,mk[selIdx]);
         if(h){dragMode='resize';dragHandle=h;dragOrig=JSON.parse(JSON.stringify(mk[selIdx]));dragStart=p;return;}
       }
-      var hi=hitTestAll(p);selIdx=hi;syncPropUI();
-      if(hi>=0){dragMode='move';dragOrig=JSON.parse(JSON.stringify(mk[hi]));dragStart=p;}
+      var hi=hitTestAll(p);
+      if(add){
+        if(hi>=0){toggleSel(hi);syncPropUI();rdMC();updML();}
+        return;
+      }
+      // Clicking an already-selected markup keeps the group so the whole set can be dragged
+      if(hi>=0&&!isSel(hi))setSel([hi]);
+      else if(hi<0)setSel([]);
+      syncPropUI();
+      if(hi>=0){dragMode='move';dragOrig=selMks().map(function(o){return{i:o.i,m:JSON.parse(JSON.stringify(o.m))};});dragStart=p;}
+      else {marquee={x0:p.x,y0:p.y,x1:p.x,y1:p.y};}
       rdMC();updML();
       return;
     }
@@ -614,9 +638,12 @@ function setupMkEv(c){
       var p=tCC(e,c);
       if(dragMode){
         var dx=p.x-dragStart.x,dy=p.y-dragStart.y,mk=pgMk();
-        mk[selIdx]=dragMode==='move'?translateFromOrig(dragOrig,dx,dy):resizeFromOrig(dragOrig,dragHandle,dx,dy);
+        if(dragMode==='move')dragOrig.forEach(function(o){mk[o.i]=translateFromOrig(o.m,dx,dy);});
+        else mk[selIdx]=resizeFromOrig(dragOrig,dragHandle,dx,dy);
         rdMC();
-      }else if(selIdx>=0){
+      }else if(marquee){
+        marquee.x1=p.x;marquee.y1=p.y;rdMC();drawMarquee(c);
+      }else if(selIdxs.length===1){
         var mk2=pgMk();
         if(selIdx<mk2.length){var h=handleAt(p,mk2[selIdx]);mC.style.cursor=h?cursorForHandle(h):(hitTest(mk2[selIdx],p)?'move':'');}
       }else mC.style.cursor='';
@@ -640,7 +667,11 @@ function setupMkEv(c){
     x.setLineDash([]);x.globalAlpha=1;x.restore();
   });
   c.addEventListener('mouseup',function(e){
-    if(mTool==='select'){if(dragMode){dragMode=null;dragHandle=null;dragOrig=null;updML();}return;}
+    if(mTool==='select'){
+      if(dragMode){dragMode=null;dragHandle=null;dragOrig=null;updML();}
+      else if(marquee){var box=marquee;marquee=null;setSel(mksInBox(box));syncPropUI();rdMC();updML();}
+      return;
+    }
     if(dragCancelled){dragCancelled=false;drawing=false;penPts=[];return;}
     if(!drawing||!mTool||mTool==='polyline'||mTool==='polygon')return;drawing=false;
     var p=constrainPt(dStart,tCC(e,c),mTool,e.shiftKey),col=gCol(),lw=gLw(),lyr=gLyr(),mk=pgMk();
@@ -660,7 +691,7 @@ function setupMkEv(c){
       var p=tCC(e,c),idx=hitTestAll(p);
       if(idx>=0){
         var m=pgMk()[idx];
-        selIdx=idx;rdMC();updML();
+        setSel([idx]);rdMC();updML();
         if(m.type==='text'||m.type==='callout')editTP(idx,e.clientX,e.clientY);
         else if(m.type==='stamp')editCS(idx,e.clientX,e.clientY);
       }
@@ -823,12 +854,31 @@ function mkBBox(ctx,m){
   if(m.type==='photo'&&m.imgW){var pw=160*(m.scale||1),ph=pw*(m.imgH/m.imgW);return{x:m.x,y:m.y,w:pw,h:ph};}
   return null;
 }
+// Rubber-band selection: pick every markup whose bounding box overlaps the dragged box
+function mksInBox(b){
+  var x0=Math.min(b.x0,b.x1),y0=Math.min(b.y0,b.y1),x1=Math.max(b.x0,b.x1),y1=Math.max(b.y0,b.y1),out=[];
+  if(x1-x0<3&&y1-y0<3)return out; // a click, not a drag
+  var ctx=mC.getContext('2d');
+  pgMk().forEach(function(m,i){
+    var bb=mkBBox(ctx,m);
+    if(bb&&bb.x<=x1&&bb.x+bb.w>=x0&&bb.y<=y1&&bb.y+bb.h>=y0)out.push(i);
+  });
+  return out;
+}
+function drawMarquee(c){
+  if(!marquee)return;var x=c.getContext('2d'),f=mkScaleF();
+  x.save();if(f!==1)x.scale(f,f);
+  x.setLineDash([5,4]);x.strokeStyle='#8B9CF4';x.lineWidth=1.5;x.fillStyle='rgba(139,156,244,.12)';
+  var mx=Math.min(marquee.x0,marquee.x1),my=Math.min(marquee.y0,marquee.y1),
+      mw=Math.abs(marquee.x1-marquee.x0),mh=Math.abs(marquee.y1-marquee.y0);
+  x.fillRect(mx,my,mw,mh);x.strokeRect(mx,my,mw,mh);x.restore();
+}
 function drawSelBox(x,bb,handles){if(!bb)return;x.save();x.setLineDash([6,4]);x.strokeStyle='#8B9CF4';x.lineWidth=2;x.strokeRect(bb.x-5,bb.y-5,bb.w+10,bb.h+10);x.setLineDash([]);x.fillStyle='#fff';x.strokeStyle='#8B9CF4';x.lineWidth=1.5;(handles||[]).forEach(function(p){x.fillRect(p.x-5,p.y-5,10,10);x.strokeRect(p.x-5,p.y-5,10,10);});x.restore();}
 function rdMC(){
   if(!mC)return;var x=mC.getContext('2d');x.clearRect(0,0,mC.width,mC.height);
   // Draw in markup space; the canvas itself is at RS resolution so markup stays crisp when zoomed
   var f=mkScaleF();x.save();if(f!==1)x.scale(f,f);
-  pgMk().forEach(function(m,i){renderOneMk(x,m);if(i===selIdx)drawSelBox(x,mkBBox(x,m),getHandles(x,m));});
+  pgMk().forEach(function(m,i){renderOneMk(x,m);if(isSel(i))drawSelBox(x,mkBBox(x,m),selIdxs.length===1?getHandles(x,m):[]);});
   x.restore();
 }
 // Text popup
@@ -862,10 +912,12 @@ function finishPoly(){
   updPolyBtns();
 }
 function cancelPoly(){drawing=false;polyPts=[];rdMC();updPolyBtns();}
-function undoMk(){var m=pgMk();if(m.length){redoStk().push(m.pop());selIdx=-1;rdMC();updMkCt();updML();}}
-function redoMk(){var r=redoStk();if(r.length){pgMk().push(r.pop());selIdx=-1;rdMC();updMkCt();updML();}}
-function clearMk(){allMk[cPg]=[];selIdx=-1;rdMC();updMkCt();updML();}
-function delMk(i){pgMk().splice(i,1);selIdx=-1;rdMC();updMkCt();updML();}
+function undoMk(){var m=pgMk();if(m.length){redoStk().push(m.pop());setSel([]);rdMC();updMkCt();updML();}}
+function redoMk(){var r=redoStk();if(r.length){pgMk().push(r.pop());setSel([]);rdMC();updMkCt();updML();}}
+function clearMk(){allMk[cPg]=[];setSel([]);rdMC();updMkCt();updML();}
+function delMk(i){pgMk().splice(i,1);setSel([]);rdMC();updMkCt();updML();}
+function delSelected(){var mk=pgMk(),ix=selIdxs.slice().sort(function(a,b){return b-a;});if(!ix.length)return;ix.forEach(function(i){if(i<mk.length)mk.splice(i,1);});setSel([]);rdMC();updMkCt();updML();}
+function selectAllMk(){var n=pgMk().length;if(!n)return;sTool('select',true);setSel(Array.from({length:n},function(_,i){return i;}));syncPropUI();rdMC();updML();}
 function updMkCt(){document.getElementById('mkCt').textContent=pgMk().length;}
 
 // Markup List panel
@@ -875,12 +927,17 @@ function updML(){
   // Summary by layer
   var lyrs={};mk.forEach(function(m){var l=m.layer||'None';lyrs[l]=(lyrs[l]||0)+1;});
   var sumHtml='';Object.keys(lyrs).forEach(function(l){sumHtml+='<span style="font-size:12px;color:var(--t2);margin-right:6px">'+l+': '+lyrs[l]+'</span>';});
-  document.getElementById('mlCt').innerHTML=mk.length+' total'+(sumHtml?' &middot; '+sumHtml:'');
+  var selTxt=selIdxs.length>1?' <b style="color:#8B9CF4">&middot; '+selIdxs.length+' selected</b>':'';
+  document.getElementById('mlCt').innerHTML=mk.length+' total'+selTxt+(sumHtml?' &middot; '+sumHtml:'');
+  var keepSel=selIdxs.slice();
   mk.forEach(function(m,i){
     var d=document.createElement('div');d.className='ml-item';d.style.borderLeftColor=m.color;
     d.innerHTML='<span class="ml-del" onclick="event.stopPropagation();delMk('+i+')">&times;</span><div class="ml-type">'+m.type+'</div><div class="ml-layer">'+((m.layer||''))+'</div>'+(m.text?'<div class="ml-txt">'+m.text.replace(/</g,'&lt;')+'</div>':'');
-    d.onclick=function(){sTool('select',true);selIdx=i;syncPropUI();rdMC();};
-    if(i===selIdx)d.style.background='var(--border)';
+    d.onclick=function(ev){sTool('select',true); // sTool clears the selection, so restore it first when extending
+      if(ev&&(ev.ctrlKey||ev.metaKey||ev.shiftKey)){setSel(keepSel);toggleSel(i);}
+      else setSel([i]);
+      syncPropUI();rdMC();updML();};
+    if(isSel(i))d.style.background='var(--border)';
     list.appendChild(d);
   });
   updMkCt();saveMk();
@@ -930,10 +987,10 @@ function wheelZoom(e){
   scheduleSharpen();
 }
 document.getElementById('va').addEventListener('wheel',wheelZoom,{passive:false});
-function chgPg(d){var n=cPg+d;if(n<1||n>mxPg)return;_sharpToken++;if(_sharpTimer){clearTimeout(_sharpTimer);_sharpTimer=null;}cPg=n;updPI();selIdx=-1;dragMode=null;dragHandle=null;dragOrig=null;ss('wt','Page '+cPg+'...');if(appMode==='markup')rCurPgSingle().then(function(){ss('rdy','Done');updMkCt();updML();});else rCurPg().then(function(){ss('rdy','Done');updMkCt();updML();});}
+function chgPg(d){var n=cPg+d;if(n<1||n>mxPg)return;_sharpToken++;if(_sharpTimer){clearTimeout(_sharpTimer);_sharpTimer=null;}cPg=n;updPI();setSel([]);dragMode=null;dragHandle=null;dragOrig=null;ss('wt','Page '+cPg+'...');if(appMode==='markup')rCurPgSingle().then(function(){ss('rdy','Done');updMkCt();updML();});else rCurPg().then(function(){ss('rdy','Done');updMkCt();updML();});}
 function updPI(){document.getElementById('pgI').textContent=cPg+'/'+mxPg;}
 function togUpload(){var s=document.getElementById('uplSec');s.classList.toggle('collapsed');document.getElementById('togUpl').textContent=s.classList.contains('collapsed')?'Files':'Hide';if(appMode==='markup'){if(iO)setTimeout(function(){drSingle(false,true);},50);}else{if(iO||iN)setTimeout(function(){dr(false,true);},50);}}
-function resetAll(){if(swipeCleanup)swipeCleanup();_sharpToken++;if(_sharpTimer){clearTimeout(_sharpTimer);_sharpTimer=null;}RS=2;pO=pN=iO=iN=pSingle=null;cPg=1;mxPg=1;zM='fit';allMk={};redoByPg={};mTool=null;selIdx=-1;dragMode=null;dragHandle=null;dragOrig=null;appMode='compare';
+function resetAll(){if(swipeCleanup)swipeCleanup();_sharpToken++;if(_sharpTimer){clearTimeout(_sharpTimer);_sharpTimer=null;}RS=2;pO=pN=iO=iN=pSingle=null;cPg=1;mxPg=1;zM='fit';allMk={};redoByPg={};mTool=null;setSel([]);dragMode=null;dragHandle=null;dragOrig=null;appMode='compare';
   document.getElementById('dO').classList.remove('ok');document.getElementById('dN').classList.remove('ok');document.getElementById('dS').classList.remove('ok');
   document.getElementById('nO').textContent='';document.getElementById('nN').textContent='';document.getElementById('nS').textContent='';
   document.getElementById('cmpBtn').disabled=true;
@@ -960,14 +1017,16 @@ document.addEventListener('keydown',function(e){var t=e.target;if(t&&(t.tagName=
   if(e.key==='Escape'){
     if(drawing){drawing=false;polyPts=[];penPts=[];dragCancelled=true;rdMC();updPolyBtns();return;}
     if(dragMode){dragMode=null;dragHandle=null;dragOrig=null;rdMC();return;}
-    if(selIdx>=0){selIdx=-1;rdMC();updML();return;}
+    if(marquee){marquee=null;rdMC();return;}
+    if(selIdx>=0){setSel([]);rdMC();updML();return;}
     if(mTool){sTool('select',true);return;}
     return;
   }
-  if(e.key==='Delete'&&selIdx>=0){delMk(selIdx);}
+  if((e.key==='Delete'||e.key==='Backspace')&&selIdx>=0){delSelected();e.preventDefault();}
   if(e.ctrlKey&&!e.shiftKey&&e.key.toLowerCase()==='z'){e.preventDefault();undoMk();}
   if((e.ctrlKey&&e.key.toLowerCase()==='y')||(e.ctrlKey&&e.shiftKey&&e.key.toLowerCase()==='z')){e.preventDefault();redoMk();}
   if(e.ctrlKey&&e.key.toLowerCase()==='c'){e.preventDefault();copySelected();}
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='a'&&appMode==='markup'){e.preventDefault();selectAllMk();}
   if(e.ctrlKey&&e.key.toLowerCase()==='v'){e.preventDefault();pasteClipboard();}
   if(e.ctrlKey&&e.key.toLowerCase()==='d'){e.preventDefault();duplicateSelected();}
 });
@@ -1060,7 +1119,7 @@ function exportJSON(){
 function importJSON(inp){
   var f=inp.files[0];if(!f)return;var rd=new FileReader();
   rd.onload=function(ev){try{var d=JSON.parse(ev.target.result);var mk=(d&&d.markups)?d.markups:d;
-    if(mk&&typeof mk==='object'){allMk=mk;selIdx=-1;if(appMode==='markup'){if(iO)drSingle(false,true);}else{if(iO||iN)dr(false,true);}rdMC();updMkCt();updML();ss('rdy','Markup loaded from file');}
+    if(mk&&typeof mk==='object'){allMk=mk;setSel([]);if(appMode==='markup'){if(iO)drSingle(false,true);}else{if(iO||iN)dr(false,true);}rdMC();updMkCt();updML();ss('rdy','Markup loaded from file');}
     else ss('wt','No markups in file');
   }catch(e){ss('wt','Invalid markup file');}};
   rd.readAsText(f);inp.value='';
