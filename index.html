@@ -94,6 +94,8 @@ body{font-family:var(--ui);background:var(--bg);color:var(--body);display:flex;f
 /* Layer tally reads as data, not a heading -- drop the heading's uppercase/tracking */
 #mlCt{text-transform:none;letter-spacing:normal;font-weight:500;font-size:12.5px;color:var(--t2)}
 .mlp-list{flex:1;overflow-y:auto;padding:6px}
+.mlp-f{display:flex;gap:4px;width:100%;margin-top:2px;flex-wrap:wrap}
+.mlp-f select,.mlp-f input{flex:1;min-width:72px;background:var(--s2);border:1px solid var(--border);color:var(--text);font-size:11px;padding:3px 5px;border-radius:4px;outline:none;font-family:var(--ui);text-transform:none;letter-spacing:normal;font-weight:400}
 .ml-item{padding:8px 11px;margin-bottom:4px;border-radius:10px;background:var(--bg);border-left:3px solid;cursor:pointer;transition:background .15s ease}
 .ml-item:hover{background:var(--s2)}
 .ml-item .ml-type{font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink)}
@@ -213,6 +215,8 @@ body{font-family:var(--ui);background:var(--bg);color:var(--body);display:flex;f
   <div class="sp"></div>
   <button class="mk" data-tool="measure" title="Hold Shift to snap to 45&deg; angles" onclick="sTool('measure')">&#128207; Measure</button>
   <button class="mk" data-tool="area" title="Hold Shift to snap to 45&deg; angles" onclick="sTool('area')">&#11036; Area</button>
+  <button class="mk" data-tool="calibrate" title="Draw a line of known length to set the drawing scale" onclick="sTool('calibrate')">&#128208; Calibrate</button>
+  <button class="mk" data-tool="count" title="Click to drop numbered count markers" onclick="sTool('count')">&#8853; Count</button>
 </div>
 <div class="mkb" id="mkBar2">
   <select class="mksel" id="mkStamp" title="Stamp type"><option value="APPROVED">APPROVED</option><option value="REJECTED">REJECTED</option><option value="REVISED">REVISED</option><option value="FOR REVIEW">FOR REVIEW</option><option value="NOT FOR CONSTRUCTION">NOT FOR CONSTRUCTION</option><option value="VOID">VOID</option><option value="PRELIMINARY">PRELIMINARY</option><option value="FINAL">FINAL</option></select>
@@ -233,6 +237,11 @@ body{font-family:var(--ui);background:var(--bg);color:var(--body);display:flex;f
   <div class="sg"><label>Style</label><select class="mksel" id="mkLineStyle" onchange="onMkDashChange(this.value)"><option value="solid" selected>Solid</option><option value="dashed">Dashed</option><option value="dotted">Dotted</option></select></div>
   <div class="sg"><label>Layer</label><select class="mksel" id="mkLyr" onchange="onMkLyrChange(this.value)"><option value="Architect Review">Architect Review</option><option value="Contractor Review">Contractor Review</option><option value="Engineer Review">Engineer Review</option><option value="Coordination">Coordination</option></select></div>
   <div class="sp"></div>
+  <button class="b bs" id="zFrontBtn" onclick="zOrder('front')" title="Bring to front">&#9650;&#9650;</button>
+  <button class="b bs" id="zFwdBtn" onclick="zOrder('forward')" title="Bring forward">&#9650;</button>
+  <button class="b bs" id="zBackBtn" onclick="zOrder('backward')" title="Send backward">&#9660;</button>
+  <button class="b bs" id="zBottomBtn" onclick="zOrder('back')" title="Send to back">&#9660;&#9660;</button>
+  <div class="sp"></div>
   <button class="b bs" onclick="undoMk()">Undo</button>
   <button class="b bs" onclick="redoMk()">Redo</button>
   <button class="b bs" onclick="clearMk()">Clear</button>
@@ -244,6 +253,7 @@ body{font-family:var(--ui);background:var(--bg);color:var(--body);display:flex;f
   <button class="b bs" id="cancelBtn" style="display:none" onclick="cancelPoly()">Cancel</button>
   <div class="sp"></div>
   <div class="sg"><label>Scale</label><input class="mksel" id="mkScale" type="text" value="1" style="width:32px" title="px per unit"><select class="mksel" id="mkUnit"><option value="px">px</option><option value="mm">mm</option><option value="m">m</option><option value="ft">ft</option><option value="in">in</option></select></div>
+  <div class="sg"><label>Count</label><input class="mksel" id="mkCountGrp" type="text" value="Item" style="width:76px" title="Count group name" placeholder="Item" oninput="updCountTot()"><span class="pi" id="mkCountTot">0</span></div>
   <span style="margin-left:auto;font-size:17.28px;color:var(--t2)" id="mkCt">0</span>
 </div>
 <div class="leg" id="leg">
@@ -254,12 +264,26 @@ body{font-family:var(--ui);background:var(--bg);color:var(--body);display:flex;f
 <div class="mid">
   <div class="va" id="va"></div>
   <div class="mlp" id="mlPanel">
-    <div class="mlp-h"><span>Markup List</span><span id="mlCt">0</span></div>
+    <div class="mlp-h"><span>Markup List</span><span id="mlCt">0</span>
+      <div class="mlp-f">
+        <select id="mlLyrF" onchange="updML()" title="Filter by layer"><option value="">All layers</option></select>
+        <select id="mlTypeF" onchange="updML()" title="Filter by type"><option value="">All types</option></select>
+        <input id="mlSearch" placeholder="Search text..." oninput="updML()" title="Search markup text">
+      </div>
+    </div>
     <div class="mlp-list" id="mlList"></div>
   </div>
 </div>
 <div class="tp" id="tPop"><textarea id="tpIn" placeholder="Enter comment..."></textarea><div class="tpb"><button class="b bs bp" onclick="cfmTxt()">Add</button><button class="b bs" onclick="cnlTxt()">Cancel</button></div></div>
 <div class="tp" id="csPop"><input id="csIn" style="width:220px;background:var(--s2);border:1px solid var(--border);color:var(--text);font-size:11.52px;padding:6px 8px;border-radius:4px;outline:none;font-family:var(--ui)" placeholder="Custom stamp text..."><div class="tpb"><button class="b bs bp" onclick="cfmCS()">Add Stamp</button><button class="b bs" onclick="cnlCS()">Cancel</button></div></div>
+<div class="tp" id="calPop">
+  <div style="font-size:12px;color:var(--t2);margin-bottom:6px">Measured <b id="calPx">0</b> px. Enter its real length:</div>
+  <div style="display:flex;gap:6px">
+    <input id="calIn" type="text" style="width:120px;background:var(--s2);border:1px solid var(--border);color:var(--text);font-size:11.52px;padding:6px 8px;border-radius:4px;outline:none;font-family:var(--ui)" placeholder="e.g. 5000">
+    <select id="calUnit" class="mksel"><option value="mm">mm</option><option value="m">m</option><option value="ft">ft</option><option value="in">in</option></select>
+  </div>
+  <div class="tpb"><button class="b bs bp" onclick="cfmCal()">Set scale</button><button class="b bs" onclick="cnlCal()">Cancel</button></div>
+</div>
 <input type="file" id="photoIn" accept="image/*" style="display:none" onchange="onPhotoSelected(this)">
 <input type="file" id="jsonIn" accept=".json,.mkup,application/json" style="display:none" onchange="importJSON(this)">
 <div class="ft"><div><span class="sd wt" id="sDot"></span><span id="sTxt">Waiting for PDF files...</span></div><div>Copyright &copy; Dang Quoc Truong (DQT)</div></div>
@@ -275,8 +299,8 @@ var aC=null,mC=null,mTool=null,selIdx=-1,swipeCleanup=null;
 // Multi-selection. selIdxs is the source of truth; selIdx mirrors its first entry so the
 // single-selection code paths (resize handles, property sync, inline editors) keep working.
 var selIdxs=[],marquee=null;
-function setSel(a){selIdxs=(a||[]).filter(function(v,i,s){return v>=0&&s.indexOf(v)===i;});selIdx=selIdxs.length?selIdxs[0]:-1;}
-function toggleSel(i){var k=selIdxs.indexOf(i);if(k>=0)selIdxs.splice(k,1);else selIdxs.push(i);selIdx=selIdxs.length?selIdxs[0]:-1;}
+function setSel(a){selIdxs=(a||[]).filter(function(v,i,s){return v>=0&&s.indexOf(v)===i;});selIdx=selIdxs.length?selIdxs[0]:-1;updZBtns();}
+function toggleSel(i){var k=selIdxs.indexOf(i);if(k>=0)selIdxs.splice(k,1);else selIdxs.push(i);selIdx=selIdxs.length?selIdxs[0]:-1;updZBtns();}
 function isSel(i){return selIdxs.indexOf(i)>=0;}
 // Selected markups, primary first, as {i,m} pairs
 function selMks(){var mk=pgMk();return selIdxs.filter(function(i){return i<mk.length;}).map(function(i){return{i:i,m:mk[i]};});}
@@ -499,7 +523,7 @@ function drCO(a){if(!iO||!iN)return;var sz=cDS(),w=Math.max(iO.width,iN.width),h
 function drSw(a){var sz=cDS(),sW=Math.max(iO?iO.width:0,iN?iN.width:0),sH=Math.max(iO?iO.height:0,iN?iN.height:0),dW=sz.w,dH=sz.h,nn=iNa();var w=document.createElement('div');w.className='sw';w.style.width=dW+'px';w.style.height=dH+'px';var cN=document.createElement('canvas');cN.width=sW;cN.height=sH;cN.style.width=dW+'px';cN.style.height=dH+'px';if(nn)cN.getContext('2d').drawImage(nn,0,0);else{var tx=cN.getContext('2d');tx.fillStyle='#FFF';tx.fillRect(0,0,sW,sH);}w.appendChild(cN);aC=cN;var cl=document.createElement('div');cl.className='soc';cl.style.width=(dW/2)+'px';var cO=document.createElement('canvas');cO.width=sW;cO.height=sH;cO.style.width=dW+'px';cO.style.height=dH+'px';if(iO)cO.getContext('2d').drawImage(iO,0,0);else{var tx2=cO.getContext('2d');tx2.fillStyle='#FFF';tx2.fillRect(0,0,sW,sH);}cl.appendChild(cO);w.appendChild(cl);var hd=document.createElement('div');hd.className='sh';hd.style.left=(dW/2)+'px';w.appendChild(hd);var lo=document.createElement('div');lo.className='slb slb-o';lo.textContent='OLD';w.appendChild(lo);var ln=document.createElement('div');ln.className='slb slb-n';ln.textContent='NEW';w.appendChild(ln);a.appendChild(w);var dg=false;function om(e){if(!dg)return;var r=w.getBoundingClientRect(),x=(e.clientX!==undefined?e.clientX:e.touches[0].clientX)-r.left;x=Math.max(0,Math.min(dW,x));cl.style.width=x+'px';hd.style.left=x+'px';}w.onmousedown=function(e){dg=true;om(e);};w.ontouchstart=function(e){dg=true;om(e);};var up=function(){dg=false;};document.addEventListener('mousemove',om);document.addEventListener('touchmove',om,{passive:true});document.addEventListener('mouseup',up);document.addEventListener('touchend',up);swipeCleanup=function(){document.removeEventListener('mousemove',om);document.removeEventListener('touchmove',om);document.removeEventListener('mouseup',up);document.removeEventListener('touchend',up);swipeCleanup=null;};}
 
 // ── Markup tools ──
-function sTool(t,force){if(!force&&mTool===t)mTool=null;else mTool=t;setSel([]);dragMode=null;dragHandle=null;dragOrig=null;if(drawing){drawing=false;polyPts=[];}document.querySelectorAll('.mk[data-tool]').forEach(function(b){b.classList.toggle('a',b.dataset.tool===mTool);});applyToolCursorClass();rdMC();updPolyBtns();}
+function sTool(t,force){if(!force&&mTool===t)mTool=null;else mTool=t;setSel([]);var cp0=document.getElementById('calPop');if(cp0)cp0.style.display='none';dragMode=null;dragHandle=null;dragOrig=null;if(drawing){drawing=false;polyPts=[];}document.querySelectorAll('.mk[data-tool]').forEach(function(b){b.classList.toggle('a',b.dataset.tool===mTool);});applyToolCursorClass();rdMC();updPolyBtns();}
 // Keep the .mko overlay's pointer-events/cursor in sync with the active tool
 function applyToolCursorClass(){if(!mC)return;mC.classList.remove('dr','sel');if(mTool==='select')mC.classList.add('sel');else if(mTool)mC.classList.add('dr');mC.style.cursor='';}
 // After placing/finishing a markup: hand off to Select with the new item selected (Bluebeam-style)
@@ -523,7 +547,7 @@ function tCC(e,c){var r=c.getBoundingClientRect(),f=mkScaleF(),sx=c.width/r.widt
 function constrainPt(anchor,p,tool,shift){
   if(!shift||!anchor||tool==='pen')return p;
   var dx=p.x-anchor.x,dy=p.y-anchor.y;
-  if(tool==='line'||tool==='arrow'||tool==='measure'||tool==='polyline'||tool==='polygon'||tool==='area'){
+  if(tool==='line'||tool==='arrow'||tool==='measure'||tool==='calibrate'||tool==='polyline'||tool==='polygon'||tool==='area'){
     var len=Math.sqrt(dx*dx+dy*dy);if(!len)return p;
     var a=Math.round(Math.atan2(dy,dx)/(Math.PI/4))*(Math.PI/4);
     return{x:anchor.x+Math.cos(a)*len,y:anchor.y+Math.sin(a)*len};
@@ -629,6 +653,7 @@ function setupMkEv(c){
     if(mTool==='stamp'){var col=gCol(),lw=gLw(),lyr=gLyr(),st=document.getElementById('mkStamp').value;pgMk().push({type:'stamp',color:col,lw:lw,layer:lyr,x:p.x,y:p.y,text:st,scale:1,opacity:gOpacity()});finishDraw();return;}
     if(mTool==='customstamp'){showCSPop(e.clientX,e.clientY,p);return;}
     if(mTool==='photo'){pendingPhotoPos=p;document.getElementById('photoIn').click();return;}
+    if(mTool==='count'){addCount(p);return;} // stays active so you can keep clicking
     if(mTool==='area'){if(!drawing){drawing=true;polyPts=[p];}else{polyPts.push(constrainPt(polyPts[polyPts.length-1],p,mTool,e.shiftKey));}rdMC();drawPreviewPoly(c);return;}
     if(mTool==='polyline'||mTool==='polygon'){if(!drawing){drawing=true;polyPts=[p];}else{polyPts.push(constrainPt(polyPts[polyPts.length-1],p,mTool,e.shiftKey));}rdMC();drawPreviewPoly(c);return;}
     drawing=true;dStart=p;penPts=[p];
@@ -663,6 +688,7 @@ function setupMkEv(c){
     else if(mTool==='line'){x.beginPath();x.moveTo(dStart.x,dStart.y);x.lineTo(p.x,p.y);x.stroke();}
     else if(mTool==='arrow')drArrow(x,dStart.x,dStart.y,p.x,p.y,col,lw);
     else if(mTool==='measure'){x.beginPath();x.moveTo(dStart.x,dStart.y);x.lineTo(p.x,p.y);x.stroke();var dist=calcDist(dStart.x,dStart.y,p.x,p.y);x.font='bold 16px Arial';x.fillStyle=col;x.fillText(dist,(dStart.x+p.x)/2+8,(dStart.y+p.y)/2-8);}
+    else if(mTool==='calibrate'){x.beginPath();x.moveTo(dStart.x,dStart.y);x.lineTo(p.x,p.y);x.stroke();var dpx=Math.round(Math.sqrt((p.x-dStart.x)*(p.x-dStart.x)+(p.y-dStart.y)*(p.y-dStart.y)));x.font='bold 16px Arial';x.fillStyle=col;x.fillText(dpx+' px',(dStart.x+p.x)/2+8,(dStart.y+p.y)/2-8);}
     else if(mTool==='pen'&&penPts.length>1){x.beginPath();x.moveTo(penPts[0].x,penPts[0].y);for(var i=1;i<penPts.length;i++)x.lineTo(penPts[i].x,penPts[i].y);x.stroke();}
     x.setLineDash([]);x.globalAlpha=1;x.restore();
   });
@@ -674,6 +700,10 @@ function setupMkEv(c){
     }
     if(dragCancelled){dragCancelled=false;drawing=false;penPts=[];return;}
     if(!drawing||!mTool||mTool==='polyline'||mTool==='polygon')return;drawing=false;
+    if(mTool==='calibrate'){var cp=constrainPt(dStart,tCC(e,c),mTool,e.shiftKey);
+      var dpx=Math.sqrt((cp.x-dStart.x)*(cp.x-dStart.x)+(cp.y-dStart.y)*(cp.y-dStart.y));
+      if(dpx<3){ss('wt','Calibration line too short');rdMC();return;}
+      showCalPop(e.clientX,e.clientY,dpx);return;}
     var p=constrainPt(dStart,tCC(e,c),mTool,e.shiftKey),col=gCol(),lw=gLw(),lyr=gLyr(),mk=pgMk();
     var base={color:col,lw:lw,layer:lyr,dash:gDash(),fill:gFill(),fillOn:gFillOn(),opacity:gOpacity()};
     if(mTool==='rect')mk.push(Object.assign(base,{type:'rect',x:dStart.x,y:dStart.y,w:p.x-dStart.x,h:p.y-dStart.y}));
@@ -736,6 +766,7 @@ function hitTestAll(p){var mk=pgMk();for(var i=mk.length-1;i>=0;i--){if(hitTest(
 function getHandles(ctx,m){
   if(m.type==='line'||m.type==='arrow'||m.type==='measure')return[{id:'p1',x:m.x1,y:m.y1},{id:'p2',x:m.x2,y:m.y2}];
   var bb=mkBBox(ctx,m);if(!bb)return[];
+  if(m.type==='count')return[]; // a point pin has nothing to resize, and a box handle would sit on top of the disc
   if(m.type==='text'||m.type==='callout'||m.type==='stamp'||m.type==='photo')return[{id:'se',x:bb.x+bb.w,y:bb.y+bb.h}];
   return[{id:'nw',x:bb.x,y:bb.y},{id:'n',x:bb.x+bb.w/2,y:bb.y},{id:'ne',x:bb.x+bb.w,y:bb.y},
     {id:'e',x:bb.x+bb.w,y:bb.y+bb.h/2},{id:'se',x:bb.x+bb.w,y:bb.y+bb.h},{id:'s',x:bb.x+bb.w/2,y:bb.y+bb.h},
@@ -789,6 +820,7 @@ function hitTest(m,p){
     if(!mC)return false;var bb=mkBBox(mC.getContext('2d'),m);if(!bb)return false;
     return p.x>=bb.x-pad&&p.x<=bb.x+bb.w+pad&&p.y>=bb.y-pad&&p.y<=bb.y+bb.h+pad;
   }
+  if(m.type==='count'){var cr=13*(m.scale||1)+pad;var cdx=p.x-m.x,cdy=p.y-m.y;return cdx*cdx+cdy*cdy<=cr*cr;}
   if(m.type==='measure'){return distToSeg(p,{x:m.x1,y:m.y1},{x:m.x2,y:m.y2})<pad;}
   if(m.type==='area'&&m.points){for(var i=0;i<m.points.length;i++){var j=(i+1)%m.points.length;if(distToSeg(p,m.points[i],m.points[j])<pad)return true;}return false;}
   return false;
@@ -839,6 +871,16 @@ function renderOneMk(x,m){
     // Area label at centroid
     var cx2=0,cy2=0;m.points.forEach(function(pt){cx2+=pt.x;cy2+=pt.y;});cx2/=m.points.length;cy2/=m.points.length;
     x.save();x.font='bold 16px Arial,sans-serif';x.fillStyle='rgba(0,0,0,.7)';var al=x.measureText(m.area||'');x.fillRect(cx2-al.width/2-4,cy2-10,al.width+8,20);x.fillStyle=m.color;x.textAlign='center';x.fillText(m.area||'',cx2,cy2+4);x.restore();}
+  else if(m.type==='count'){
+    var cs=m.scale||1,r=13*cs;
+    x.beginPath();x.arc(m.x,m.y,r,0,Math.PI*2);x.fillStyle=m.color;x.fill();
+    x.lineWidth=2;x.strokeStyle='#fff';x.stroke();
+    x.fillStyle='#fff';x.font='bold '+(14*cs)+'px Arial,sans-serif';x.textAlign='center';x.textBaseline='middle';
+    x.fillText(String(m.n||1),m.x,m.y);
+    x.textAlign='left';x.textBaseline='alphabetic';
+    // The group is carried by colour, the list and the CSV -- a label on every pin
+    // collides with neighbouring pins once a takeoff gets dense.
+  }
   else if(m.type==='photo'){var pi=getPhotoImg(m.imgData);if(pi.complete){var pw=160*(m.scale||1),ph=pw*(m.imgH/m.imgW);x.save();x.shadowColor='rgba(0,0,0,.4)';x.shadowBlur=8;x.drawImage(pi,m.x,m.y,pw,ph);x.restore();x.strokeStyle=m.color;x.lineWidth=2;x.strokeRect(m.x,m.y,pw,ph);x.font='bold 10px Arial';x.fillStyle=m.color;x.fillText(m.text||'photo',m.x,m.y-4);}}
   x.restore();
 }
@@ -851,6 +893,7 @@ function mkBBox(ctx,m){
   if(m.type==='text'){var ts=m.scale||1;ctx.save();ctx.font=textFont(24*ts,m);var tw=ctx.measureText(m.text||'').width+10*ts;ctx.restore();return{x:m.x-2*ts,y:m.y-22*ts,w:tw,h:28*ts};}
   if(m.type==='callout'){var cs=m.scale||1;ctx.save();ctx.font=textFont(20*cs,m);var cw=ctx.measureText(m.text||'').width+10*cs;ctx.restore();var bx=m.x+30*cs,by=m.y-50*cs,minx=Math.min(bx,m.x),miny=Math.min(by-18*cs,m.y);return{x:minx,y:miny,w:Math.max(bx+cw,m.x)-minx,h:Math.max(by+6*cs,m.y)-miny};}
   if(m.type==='stamp'){var ss=m.scale||1;ctx.save();ctx.font='bold '+(32*ss)+'px Arial,sans-serif';var sw=ctx.measureText(m.text||'').width+24*ss;ctx.restore();return{x:m.x-sw/2,y:m.y-22*ss,w:sw,h:44*ss};}
+  if(m.type==='count'){var cs=m.scale||1,r=13*cs;return{x:m.x-r,y:m.y-r,w:r*2,h:r*2};}
   if(m.type==='photo'&&m.imgW){var pw=160*(m.scale||1),ph=pw*(m.imgH/m.imgW);return{x:m.x,y:m.y,w:pw,h:ph};}
   return null;
 }
@@ -912,13 +955,47 @@ function finishPoly(){
   updPolyBtns();
 }
 function cancelPoly(){drawing=false;polyPts=[];rdMC();updPolyBtns();}
-function undoMk(){var m=pgMk();if(m.length){redoStk().push(m.pop());setSel([]);rdMC();updMkCt();updML();}}
-function redoMk(){var r=redoStk();if(r.length){pgMk().push(r.pop());setSel([]);rdMC();updMkCt();updML();}}
+function undoMk(){var m=pgMk();if(m.length){redoStk().push(m.pop());renumberCounts();setSel([]);rdMC();updMkCt();updML();}}
+function redoMk(){var r=redoStk();if(r.length){pgMk().push(r.pop());renumberCounts();setSel([]);rdMC();updMkCt();updML();}}
 function clearMk(){allMk[cPg]=[];setSel([]);rdMC();updMkCt();updML();}
-function delMk(i){pgMk().splice(i,1);setSel([]);rdMC();updMkCt();updML();}
-function delSelected(){var mk=pgMk(),ix=selIdxs.slice().sort(function(a,b){return b-a;});if(!ix.length)return;ix.forEach(function(i){if(i<mk.length)mk.splice(i,1);});setSel([]);rdMC();updMkCt();updML();}
+function delMk(i){pgMk().splice(i,1);renumberCounts();setSel([]);rdMC();updMkCt();updML();}
+function delSelected(){var mk=pgMk(),ix=selIdxs.slice().sort(function(a,b){return b-a;});if(!ix.length)return;ix.forEach(function(i){if(i<mk.length)mk.splice(i,1);});renumberCounts();setSel([]);rdMC();updMkCt();updML();}
+// Z-order. Render order is array order, so reordering the array reorders the drawing.
+function zOrder(dir){
+  var mk=pgMk(),ix=selIdxs.slice().sort(function(a,b){return a-b;});
+  ix=ix.filter(function(i){return i<mk.length;});
+  if(!ix.length)return;
+  if(dir==='front'||dir==='back'){
+    var picked=ix.map(function(i){return mk[i];});
+    for(var k=ix.length-1;k>=0;k--)mk.splice(ix[k],1);
+    if(dir==='front'){picked.forEach(function(m){mk.push(m);});ix=picked.map(function(_,j){return mk.length-picked.length+j;});}
+    else{picked.forEach(function(m,j){mk.splice(j,0,m);});ix=picked.map(function(_,j){return j;});}
+  }else if(dir==='forward'){
+    // Walk from the top down; ix is updated in place so a moved neighbour is seen as blocked
+    for(var k=ix.length-1;k>=0;k--){
+      var i=ix[k];
+      if(i>=mk.length-1||ix.indexOf(i+1)>=0)continue;
+      var t=mk[i];mk[i]=mk[i+1];mk[i+1]=t;ix[k]=i+1;
+    }
+  }else if(dir==='backward'){
+    for(var k2=0;k2<ix.length;k2++){
+      var j2=ix[k2];
+      if(j2<=0||ix.indexOf(j2-1)>=0)continue;
+      var t2=mk[j2];mk[j2]=mk[j2-1];mk[j2-1]=t2;ix[k2]=j2-1;
+    }
+  }
+  setSel(ix);rdMC();updML();
+}
+// Z-order acts on the selection, so grey the buttons out when nothing is selected
+function updZBtns(){
+  var on=selIdxs.length>0;
+  ['zFrontBtn','zFwdBtn','zBackBtn','zBottomBtn'].forEach(function(id){
+    var b=document.getElementById(id);if(!b)return;
+    b.disabled=!on;b.style.opacity=on?'':'.4';b.style.pointerEvents=on?'':'none';
+  });
+}
 function selectAllMk(){var n=pgMk().length;if(!n)return;sTool('select',true);setSel(Array.from({length:n},function(_,i){return i;}));syncPropUI();rdMC();updML();}
-function updMkCt(){document.getElementById('mkCt').textContent=pgMk().length;}
+function updMkCt(){document.getElementById('mkCt').textContent=pgMk().length;updCountTot();}
 
 // Markup List panel
 function togListPanel(){var p=document.getElementById('mlPanel');p.classList.toggle('v');if(iO||iN)setTimeout(function(){if(appMode==='markup'){if(iO)drSingle(false,true);}else{dr(false,true);}},50);}
@@ -927,12 +1004,23 @@ function updML(){
   // Summary by layer
   var lyrs={};mk.forEach(function(m){var l=m.layer||'None';lyrs[l]=(lyrs[l]||0)+1;});
   var sumHtml='';Object.keys(lyrs).forEach(function(l){sumHtml+='<span style="font-size:12px;color:var(--t2);margin-right:6px">'+l+': '+lyrs[l]+'</span>';});
-  var selTxt=selIdxs.length>1?' <b style="color:#8B9CF4">&middot; '+selIdxs.length+' selected</b>':'';
-  document.getElementById('mlCt').innerHTML=mk.length+' total'+selTxt+(sumHtml?' &middot; '+sumHtml:'');
-  var keepSel=selIdxs.slice();
+  // Keep the filter dropdowns in sync with what is actually on the page, preserving the choice
+  var types={};mk.forEach(function(m){types[m.type]=1;});
+  fillFilter('mlLyrF',Object.keys(lyrs).sort(),'All layers');
+  fillFilter('mlTypeF',Object.keys(types).sort(),'All types');
+  var fL=fv('mlLyrF'),fT=fv('mlTypeF'),fQ=fv('mlSearch').trim().toLowerCase();
+  function passes(m){
+    if(fL&&(m.layer||'None')!==fL)return false;
+    if(fT&&m.type!==fT)return false;
+    if(fQ){var hay=((m.text||'')+' '+m.type+' '+(m.layer||'')).toLowerCase();if(hay.indexOf(fQ)<0)return false;}
+    return true;
+  }
+  var shown=0,keepSel=selIdxs.slice();
   mk.forEach(function(m,i){
+    if(!passes(m))return;
+    shown++;
     var d=document.createElement('div');d.className='ml-item';d.style.borderLeftColor=m.color;
-    d.innerHTML='<span class="ml-del" onclick="event.stopPropagation();delMk('+i+')">&times;</span><div class="ml-type">'+m.type+'</div><div class="ml-layer">'+((m.layer||''))+'</div>'+(m.text?'<div class="ml-txt">'+m.text.replace(/</g,'&lt;')+'</div>':'');
+    d.innerHTML='<span class="ml-del" onclick="event.stopPropagation();delMk('+i+')">&times;</span><div class="ml-type">'+(m.type==='count'?('count &middot; '+(m.grp||'')+' #'+(m.n||'')):m.type)+'</div><div class="ml-layer">'+((m.layer||''))+'</div>'+(m.text?'<div class="ml-txt">'+m.text.replace(/</g,'&lt;')+'</div>':'');
     d.onclick=function(ev){sTool('select',true); // sTool clears the selection, so restore it first when extending
       if(ev&&(ev.ctrlKey||ev.metaKey||ev.shiftKey)){setSel(keepSel);toggleSel(i);}
       else setSel([i]);
@@ -940,8 +1028,23 @@ function updML(){
     if(isSel(i))d.style.background='var(--border)';
     list.appendChild(d);
   });
+  var filtered=(fL||fT||fQ);
+  var selTxt=selIdxs.length>1?' <b style="color:#8B9CF4">&middot; '+selIdxs.length+' selected</b>':'';
+  var head=filtered?('showing '+shown+' of '+mk.length):(mk.length+' total');
+  document.getElementById('mlCt').innerHTML=head+selTxt+(sumHtml?' &middot; '+sumHtml:'');
+  if(filtered&&!shown)list.innerHTML='<div style="padding:10px;font-size:12px;color:var(--t2)">No markup matches this filter.</div>';
   updMkCt();saveMk();
 }
+// Rebuild a filter <select> from the current values, keeping the user's choice if it still exists
+function fillFilter(id,vals,allLabel){
+  var s=document.getElementById(id);if(!s)return;
+  var cur=s.value;
+  if(s.dataset.vals===vals.join('\u0000'))return; // unchanged, don't disturb the open dropdown
+  s.dataset.vals=vals.join('\u0000');
+  s.innerHTML='<option value="">'+allLabel+'</option>'+vals.map(function(v){return '<option value="'+v.replace(/"/g,'&quot;')+'">'+v.replace(/</g,'&lt;')+'</option>';}).join('');
+  s.value=vals.indexOf(cur)>=0?cur:'';
+}
+function fv(id){var e=document.getElementById(id);return e?e.value:'';}
 
 // ── Manual alignment controls ──
 function updAlnInfo(){var el=document.getElementById('alnInfo');if(el)el.textContent=Math.round(alnX/MK_RS)+', '+Math.round(alnY/MK_RS);}
@@ -1083,12 +1186,13 @@ async function exportPDF(scope){
 }
 // CSV Export - Bluebeam-style markup summary
 function exportCSV(){
-  var rows=[['Page','Type','Layer','Color','LineWidth','Comment','X','Y']];
+  var rows=[['Page','Type','Layer','Color','LineWidth','Comment','X','Y','CountGroup','CountNo']];
   for(var pg=1;pg<=mxPg;pg++){
     var mk=allMk[pg]||[];
     mk.forEach(function(m){
       rows.push([pg,m.type,m.layer||'',m.color,m.lw||3,'"'+(m.text||'').replace(/"/g,'""')+'"',
-        Math.round(m.x||m.x1||0),Math.round(m.y||m.y1||0)]);
+        Math.round(m.x||m.x1||0),Math.round(m.y||m.y1||0),
+        m.type==='count'?'"'+String(m.grp||'').replace(/"/g,'""')+'"':'',m.type==='count'?(m.n||''):'']);
     });
   }
   var csv=rows.map(function(r){return r.join(',');}).join('\n');
@@ -1105,6 +1209,7 @@ function getDocKey(){
   return (a&&b)?'pdfmkup:cmp:'+a+'|'+b:null;
 }
 function saveMk(){var k=getDocKey();if(!k)return;try{localStorage.setItem(k,JSON.stringify(allMk));}catch(e){}}
+updZBtns(); // start with the z-order buttons greyed out until something is selected
 function loadMk(){var k=getDocKey();if(!k)return false;try{var s=localStorage.getItem(k);if(!s)return false;var d=JSON.parse(s);if(d&&typeof d==='object'){allMk=d;return true;}}catch(e){}return false;}
 // Portable .mkup.json file export/import
 function exportJSON(){
@@ -1125,6 +1230,60 @@ function importJSON(inp){
   rd.readAsText(f);inp.value='';
 }
 // ── Measurement helpers ──
+// ── Count tool ──
+function gCountGrp(){var e=document.getElementById('mkCountGrp');var v=e?e.value.trim():'';return v||'Item';}
+// Counts are numbered per group per page, so each group reads 1..N
+function nextCountN(grp){var n=0;pgMk().forEach(function(m){if(m.type==='count'&&m.grp===grp)n++;});return n+1;}
+function addCount(p){
+  var grp=gCountGrp();
+  pgMk().push({type:'count',color:gCol(),lw:gLw(),layer:gLyr(),opacity:gOpacity(),x:p.x,y:p.y,grp:grp,n:nextCountN(grp),scale:1});
+  redoStk().length=0;setSel([]);rdMC();updMkCt();updML();
+}
+// After a delete the remaining markers would have gaps, so renumber each group in place
+function renumberCounts(){
+  var seen={};
+  pgMk().forEach(function(m){if(m.type==='count'){seen[m.grp]=(seen[m.grp]||0)+1;m.n=seen[m.grp];}});
+}
+function countTotals(){var t={};pgMk().forEach(function(m){if(m.type==='count')t[m.grp]=(t[m.grp]||0)+1;});return t;}
+function updCountTot(){
+  var e=document.getElementById('mkCountTot');if(!e)return;
+  var t=countTotals(),g=gCountGrp();
+  var tot=Object.keys(t).reduce(function(s,k){return s+t[k];},0);
+  e.textContent=(t[g]||0)+(tot!==(t[g]||0)?' / '+tot:'');
+  e.title=Object.keys(t).length?Object.keys(t).sort().map(function(k){return k+': '+t[k];}).join(', '):'No counts yet';
+}
+// ── Calibrate ──
+var calPx=0;
+function showCalPop(cx,cy,px){
+  calPx=px;var pop=document.getElementById('calPop');
+  document.getElementById('calPx').textContent=Math.round(px);
+  pop.style.display='block';pop.style.left=Math.min(cx,innerWidth-260)+'px';pop.style.top=Math.min(cy,innerHeight-140)+'px';
+  var inp=document.getElementById('calIn');inp.value='';inp.focus();
+}
+function cnlCal(){document.getElementById('calPop').style.display='none';calPx=0;rdMC();}
+function cfmCal(){
+  var real=parseFloat(document.getElementById('calIn').value);
+  if(!(real>0)||!(calPx>0)){ss('wt','Enter a length greater than 0');return;}
+  var unit=document.getElementById('calUnit').value;
+  // Scale is stored as pixels per unit, which is what calcDist/calcArea divide by
+  document.getElementById('mkScale').value=(calPx/real).toFixed(4);
+  document.getElementById('mkUnit').value=unit;
+  var pxPer=calPx/real;
+  document.getElementById('calPop').style.display='none';calPx=0;
+  sTool('select',true); // calibration is a one-shot action, so hand the tool back
+  refreshMeasurements();
+  ss('rdy','Scale set: '+pxPer.toFixed(4)+' px per '+unit);
+}
+// Existing measure/area labels are cached strings, so recompute them against the new scale
+function refreshMeasurements(){
+  Object.keys(allMk).forEach(function(pg){
+    (allMk[pg]||[]).forEach(function(m){
+      if(m.type==='measure')m.dist=calcDist(m.x1,m.y1,m.x2,m.y2);
+      else if(m.type==='area'&&m.points)m.area=calcArea(m.points);
+    });
+  });
+  rdMC();updML();
+}
 function getScale(){return parseFloat(document.getElementById('mkScale').value)||1;}
 function getUnit(){return document.getElementById('mkUnit').value;}
 function calcDist(x1,y1,x2,y2){var px=Math.sqrt((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1));var sc=getScale(),u=getUnit();if(u==='px')return Math.round(px)+'px';return (px/sc).toFixed(2)+' '+u;}
@@ -1150,6 +1309,7 @@ function cfmCS(){
 }
 function cnlCS(){document.getElementById('csPop').style.display='none';csPos=null;csEditIdx=-1;}
 document.getElementById('csIn').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();cfmCS();}if(e.key==='Escape')cnlCS();});
+document.getElementById('calIn').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();cfmCal();}if(e.key==='Escape')cnlCal();});
 // ── Photo attachment ──
 var pendingPhotoPos=null;
 function onPhotoSelected(inp){
