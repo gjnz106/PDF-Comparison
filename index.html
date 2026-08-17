@@ -194,16 +194,16 @@ body{font-family:var(--ui);background:var(--bg);color:var(--body);display:flex;f
   <span class="mkl">MARKUP</span>
   <button class="mk" data-tool="select" onclick="sTool('select')">&#9754; Select</button>
   <div class="sp"></div>
-  <button class="mk" data-tool="rect" onclick="sTool('rect')">&#9633; Rect</button>
-  <button class="mk" data-tool="circle" onclick="sTool('circle')">&#9675; Circle</button>
-  <button class="mk" data-tool="cloud" onclick="sTool('cloud')">&#9729; Cloud</button>
-  <button class="mk" data-tool="highlight" onclick="sTool('highlight')">&#9632; Highlight</button>
+  <button class="mk" data-tool="rect" title="Hold Shift for a perfect square/circle" onclick="sTool('rect')">&#9633; Rect</button>
+  <button class="mk" data-tool="circle" title="Hold Shift for a perfect square/circle" onclick="sTool('circle')">&#9675; Circle</button>
+  <button class="mk" data-tool="cloud" title="Hold Shift for a perfect square/circle" onclick="sTool('cloud')">&#9729; Cloud</button>
+  <button class="mk" data-tool="highlight" title="Hold Shift for a perfect square/circle" onclick="sTool('highlight')">&#9632; Highlight</button>
   <div class="sp"></div>
-  <button class="mk" data-tool="line" onclick="sTool('line')">&#9585; Line</button>
-  <button class="mk" data-tool="arrow" onclick="sTool('arrow')">&#8599; Arrow</button>
+  <button class="mk" data-tool="line" title="Hold Shift to snap to 45&deg; angles" onclick="sTool('line')">&#9585; Line</button>
+  <button class="mk" data-tool="arrow" title="Hold Shift to snap to 45&deg; angles" onclick="sTool('arrow')">&#8599; Arrow</button>
   <button class="mk" data-tool="pen" onclick="sTool('pen')">&#9998; Pen</button>
-  <button class="mk" data-tool="polyline" onclick="sTool('polyline')">&#10137; Polyline</button>
-  <button class="mk" data-tool="polygon" onclick="sTool('polygon')">&#11039; Polygon</button>
+  <button class="mk" data-tool="polyline" title="Hold Shift to snap to 45&deg; angles" onclick="sTool('polyline')">&#10137; Polyline</button>
+  <button class="mk" data-tool="polygon" title="Hold Shift to snap to 45&deg; angles" onclick="sTool('polygon')">&#11039; Polygon</button>
   <div class="sp"></div>
   <button class="mk" data-tool="text" onclick="sTool('text')">T Text</button>
   <button class="mk" data-tool="callout" onclick="sTool('callout')">&#9993; Callout</button>
@@ -211,8 +211,8 @@ body{font-family:var(--ui);background:var(--bg);color:var(--body);display:flex;f
   <button class="mk" data-tool="customstamp" onclick="sTool('customstamp')">&#9998;+ Custom</button>
   <button class="mk" data-tool="photo" onclick="sTool('photo')">&#128247; Photo</button>
   <div class="sp"></div>
-  <button class="mk" data-tool="measure" onclick="sTool('measure')">&#128207; Measure</button>
-  <button class="mk" data-tool="area" onclick="sTool('area')">&#11036; Area</button>
+  <button class="mk" data-tool="measure" title="Hold Shift to snap to 45&deg; angles" onclick="sTool('measure')">&#128207; Measure</button>
+  <button class="mk" data-tool="area" title="Hold Shift to snap to 45&deg; angles" onclick="sTool('area')">&#11036; Area</button>
 </div>
 <div class="mkb" id="mkBar2">
   <select class="mksel" id="mkStamp" title="Stamp type"><option value="APPROVED">APPROVED</option><option value="REJECTED">REJECTED</option><option value="REVISED">REVISED</option><option value="FOR REVIEW">FOR REVIEW</option><option value="NOT FOR CONSTRUCTION">NOT FOR CONSTRUCTION</option><option value="VOID">VOID</option><option value="PRELIMINARY">PRELIMINARY</option><option value="FINAL">FINAL</option></select>
@@ -498,6 +498,30 @@ function pasteClipboard(){if(!mkClipboard)return;pgMk().push(translateFromOrig(m
 function duplicateSelected(){if(selIdx<0)return;var src=pgMk()[selIdx];if(!src)return;pgMk().push(translateFromOrig(src,20,20));finishDraw();syncPropUI();}
 // Pointer position -> markup coordinate space (divided by mkScaleF so it stays RS-independent)
 function tCC(e,c){var r=c.getBoundingClientRect(),f=mkScaleF(),sx=c.width/r.width,sy=c.height/r.height;return{x:(e.clientX-r.left)*sx/f,y:(e.clientY-r.top)*sy/f};}
+// Holding Shift constrains the shape being drawn, Bluebeam-style:
+//  - line/arrow/measure/polyline/polygon/area: snap the segment to the nearest 45 degrees
+//  - rect/circle/cloud/highlight: force equal width & height (perfect square / circle)
+// Free-hand pen is deliberately never constrained.
+function constrainPt(anchor,p,tool,shift){
+  if(!shift||!anchor||tool==='pen')return p;
+  var dx=p.x-anchor.x,dy=p.y-anchor.y;
+  if(tool==='line'||tool==='arrow'||tool==='measure'||tool==='polyline'||tool==='polygon'||tool==='area'){
+    var len=Math.sqrt(dx*dx+dy*dy);if(!len)return p;
+    var a=Math.round(Math.atan2(dy,dx)/(Math.PI/4))*(Math.PI/4);
+    return{x:anchor.x+Math.cos(a)*len,y:anchor.y+Math.sin(a)*len};
+  }
+  var s=Math.max(Math.abs(dx),Math.abs(dy));
+  return{x:anchor.x+(dx<0?-s:s),y:anchor.y+(dy<0?-s:s)};
+}
+// Double-clicking to finish a polyline/polygon/area also fires its two constituent clicks, which
+// would otherwise leave duplicate vertices stacked on the final point. Drop consecutive dupes.
+function dedupePts(pts){var out=[];for(var i=0;i<pts.length;i++){var p=pts[i],q=out[out.length-1];if(!q||Math.abs(p.x-q.x)>0.5||Math.abs(p.y-q.y)>0.5)out.push(p);}return out;}
+// The point a Shift-constraint is measured from: the last placed vertex for multi-point tools,
+// otherwise where the drag started.
+function drawAnchor(tool){
+  if(tool==='polyline'||tool==='polygon'||tool==='area')return polyPts.length?polyPts[polyPts.length-1]:null;
+  return dStart;
+}
 function gLw(){return parseInt(document.getElementById('mkLw').value)||3;}
 function gCol(){return document.getElementById('mkCol').value;}
 function gLyr(){return document.getElementById('mkLyr').value;}
@@ -559,8 +583,8 @@ function setupMkEv(c){
     if(mTool==='stamp'){var col=gCol(),lw=gLw(),lyr=gLyr(),st=document.getElementById('mkStamp').value;pgMk().push({type:'stamp',color:col,lw:lw,layer:lyr,x:p.x,y:p.y,text:st,scale:1});finishDraw();return;}
     if(mTool==='customstamp'){showCSPop(e.clientX,e.clientY,p);return;}
     if(mTool==='photo'){pendingPhotoPos=p;document.getElementById('photoIn').click();return;}
-    if(mTool==='area'){if(!drawing){drawing=true;polyPts=[p];}else{polyPts.push(p);}rdMC();drawPreviewPoly(c);return;}
-    if(mTool==='polyline'||mTool==='polygon'){if(!drawing){drawing=true;polyPts=[p];}else{polyPts.push(p);}rdMC();drawPreviewPoly(c);return;}
+    if(mTool==='area'){if(!drawing){drawing=true;polyPts=[p];}else{polyPts.push(constrainPt(polyPts[polyPts.length-1],p,mTool,e.shiftKey));}rdMC();drawPreviewPoly(c);return;}
+    if(mTool==='polyline'||mTool==='polygon'){if(!drawing){drawing=true;polyPts=[p];}else{polyPts.push(constrainPt(polyPts[polyPts.length-1],p,mTool,e.shiftKey));}rdMC();drawPreviewPoly(c);return;}
     drawing=true;dStart=p;penPts=[p];
   });
   c.addEventListener('mousemove',function(e){
@@ -577,6 +601,7 @@ function setupMkEv(c){
       return;
     }
     if(!drawing||!mTool)return;var p=tCC(e,c);
+    p=constrainPt(drawAnchor(mTool),p,mTool,e.shiftKey);
     if(mTool==='pen')penPts.push(p);
     if(mTool==='polyline'||mTool==='polygon'||mTool==='area'){rdMC();drawPreviewPoly(c,p);return;}
     rdMC();var x=c.getContext('2d'),col=gCol(),lw=gLw(),pf=mkScaleF();
@@ -596,7 +621,7 @@ function setupMkEv(c){
     if(mTool==='select'){if(dragMode){dragMode=null;dragHandle=null;dragOrig=null;updML();}return;}
     if(dragCancelled){dragCancelled=false;drawing=false;penPts=[];return;}
     if(!drawing||!mTool||mTool==='polyline'||mTool==='polygon')return;drawing=false;
-    var p=tCC(e,c),col=gCol(),lw=gLw(),lyr=gLyr(),mk=pgMk();
+    var p=constrainPt(dStart,tCC(e,c),mTool,e.shiftKey),col=gCol(),lw=gLw(),lyr=gLyr(),mk=pgMk();
     var base={color:col,lw:lw,layer:lyr,dash:gDash()};
     if(mTool==='rect')mk.push(Object.assign(base,{type:'rect',x:dStart.x,y:dStart.y,w:p.x-dStart.x,h:p.y-dStart.y}));
     else if(mTool==='circle')mk.push(Object.assign(base,{type:'circle',x:dStart.x,y:dStart.y,w:p.x-dStart.x,h:p.y-dStart.y}));
@@ -621,12 +646,12 @@ function setupMkEv(c){
     }
     if((mTool==='polyline'||mTool==='polygon')&&drawing&&polyPts.length>1){
       drawing=false;var col=gCol(),lw=gLw(),lyr=gLyr(),base={color:col,lw:lw,layer:lyr,dash:gDash()};
-      pgMk().push(Object.assign(base,{type:mTool,points:polyPts.slice()}));
+      pgMk().push(Object.assign(base,{type:mTool,points:dedupePts(polyPts)}));
       polyPts=[];finishDraw();updPolyBtns();
     }
     if(mTool==='area'&&drawing&&polyPts.length>2){
       drawing=false;var col2=gCol(),lw2=gLw(),lyr2=gLyr();
-      pgMk().push({type:'area',color:col2,lw:lw2,layer:lyr2,dash:gDash(),points:polyPts.slice(),area:calcArea(polyPts)});
+      var apts=dedupePts(polyPts);pgMk().push({type:'area',color:col2,lw:lw2,layer:lyr2,dash:gDash(),points:apts,area:calcArea(apts)});
       polyPts=[];finishDraw();updPolyBtns();
     }
   });
@@ -797,9 +822,9 @@ function finishPoly(){
   if(!drawing)return;
   var created=false;
   if((mTool==='polyline'||mTool==='polygon')&&polyPts.length>1){
-    pgMk().push(Object.assign({color:gCol(),lw:gLw(),layer:gLyr(),dash:gDash()},{type:mTool,points:polyPts.slice()}));created=true;
+    pgMk().push(Object.assign({color:gCol(),lw:gLw(),layer:gLyr(),dash:gDash()},{type:mTool,points:dedupePts(polyPts)}));created=true;
   }else if(mTool==='area'&&polyPts.length>2){
-    pgMk().push({type:'area',color:gCol(),lw:gLw(),layer:gLyr(),dash:gDash(),points:polyPts.slice(),area:calcArea(polyPts)});created=true;
+    var fpts=dedupePts(polyPts);pgMk().push({type:'area',color:gCol(),lw:gLw(),layer:gLyr(),dash:gDash(),points:fpts,area:calcArea(fpts)});created=true;
   }
   drawing=false;polyPts=[];
   if(created)finishDraw();else rdMC();
